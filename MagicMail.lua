@@ -2,6 +2,7 @@
 
 
 local mod = {}
+local GeminiGUI = Apollo.GetPackage("Gemini:GUI-1.0").tPackage
 
 function mod:new(o)
    o = o or {}
@@ -13,27 +14,59 @@ end
 function mod:Init()
    Apollo.RegisterAddon(self, false, "Configure", { "Mail" })
    Apollo.RegisterSlashCommand("magmail", "OnSlashCommand", self)
-   Print("MagicMail initialized.")
+   mod.guiDefinition = { -- PushButton
+      WidgetType    = "PushButton",
+      Text          = "Take All",
+      Name = "TakeAllBtn",
+      Base = "CRB_Basekit:kitBtn_Metal_LargeGreen",
+      AnchorPoints = { 0, 1, 0, 1 },
+      AnchorOffsets = {212,-78,324,-31},
+      NormalTextColor = "UI_BtnTextGreenNormal",
+      PressedTextColor = "UI_BtnTextGreenPressed",
+      Events = { ButtonSignal = function()
+		    mod:OnSlashCommand()
+	       end },
+   }
+   Apollo.RegisterEventHandler("MailBoxActivate", "OnMailboxOpened", self)
+   Apollo.RegisterEventHandler("MailBoxDeactivate", "OnMailboxClosed", self)
+   Apollo.RegisterEventHandler("WindowManagementReady", "OnWindowManagementReady", self)
 end
  
-function mod:OnLoad()
-   -- NOOP right now
+function mod:OnWindowManagementReady()
+   -- NOOP right now 
+   self.mailAddon = Apollo.GetAddon("Mail")
+   local mailform = self.mailAddon.wndMain:FindChild("MailForm")
+   mod.button = mailform:FindChild("TakeAllBtn") or GeminiGUI:Create(self.guiDefinition):GetInstance(self, mailform)
+   mod.button:Enable(false)
+end
+
+
+function mod:OnMailboxOpened()
+   mod.atMailbox = true
+   mod.button:Enable(true)
+end
+
+function mod:OnMailboxClosed()
+   mod.atMailbox = false
+   mod.button:Enable(false)
 end
 
 function mod:OnSlashCommand()
-   Print("Hello, executing slash here.")
-   mod:ProcessMailbox()
+   if mod.atMailbox then 
+      if mod.pendingMails then
+	 mod:FinishMailboxProcess()
+      else
+	 mod:ProcessMailbox()
+      end
+   end
 end
 
 function mod:ProcessMailbox()
-   mod:FinishMailboxProcess()
    local pendingMails = MailSystemLib.GetInbox()
    if not #pendingMails then
-      Print("No mails to process.")
       return
    end
-   Print("Master, you have "..#pendingMails.." mails waiting.")
-   
+   if self.button then self.button:SetText("Cancel ("..#pendingMails..")") end
    self.pendingMails = pendingMails
    self.mailsToDelete = {}
    self.currentMailIndex = 1
@@ -41,13 +74,16 @@ function mod:ProcessMailbox()
 end
 
 function mod:ProcessNextBatch()
+   if not self.pendingMails then
+      return
+   end
    local startIdx = self.currentMailIndex or 1
    local isLastBatch = false
    local mails = self.pendingMails
 
    local mail, sender, subject, hasMoney, hasAttachments, msgInfo
    local numProcessed = 0
-   local endIdx
+   local endIdx = 1
    for i=startIdx,#mails do
       endIdx = i
       mail = self.pendingMails[i]
@@ -89,6 +125,7 @@ function mod:ProcessNextBatch()
 
    if endIdx < #mails then
       self.currentMailIndex = endIdx + 1
+      if self.button then self.button:SetText("Cancel ("..(#mails-self.currentMailIndex)..")") end
       if not self.timer then
 	 self.timer = ApolloTimer.Create(0.4, true, "ProcessNextBatch", self)
       end
@@ -115,7 +152,7 @@ function mod:FinishMailboxProcess()
    self.currentMailIndex = nil
    self.pendingMails = nil
    self.mailsToDelete = nil
-   
+   if self.button then self.button:SetText("Take All") end
 end
 
 

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Addon Author="NeoTron" APIVersion="8" Name="MagicMail" Description="Adds functionality to rapidly fetch all items and money from mails.">
-    <Script Name="MagicMail.lua"/>
-    <!-- Form Name="MailHelper.xml"/ -->
+  <Script File="Libs\GeminiGUI\GeminiGUI.lua"/>
+  <Script Name="MagicMail.lua"/>
 </Addon>

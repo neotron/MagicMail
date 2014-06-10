@@ -1,0 +1,3 @@
+[submodule "Libs/GeminiGUI"]
+	path = Libs/GeminiGUI
+	url = git@github.com:wildstarnasa/GeminiGUI.git
