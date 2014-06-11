@@ -27,37 +27,34 @@ function mod:Init()
 		    mod:OnSlashCommand()
 	       end },
    }
-   Apollo.RegisterEventHandler("MailBoxActivate", "OnMailboxOpened", self)
-   Apollo.RegisterEventHandler("MailBoxDeactivate", "OnMailboxClosed", self)
    Apollo.RegisterEventHandler("WindowManagementReady", "OnWindowManagementReady", self)
+   Apollo.RegisterEventHandler("MailResult", "OnMailResult", self)
+   
 end
- 
+
+function mod:OnMailResult(result)
+   if result == GameLib.CodeEnumGenericError.Mail_MailBoxOutOfRange  or
+      result == GameLib.CodeEnumGenericError.Item_InventoryFull then
+      -- Can still get cash
+      Print("Too far away, fetching cash only.")
+      mod.getCashOnly = true;
+   elseif result == GameLib.CodeEnumGenericError.Mail_Busy then
+      mod:FinishMailboxProcess()
+   end
+end
+
 function mod:OnWindowManagementReady()
    -- NOOP right now 
    self.mailAddon = Apollo.GetAddon("Mail")
    local mailform = self.mailAddon.wndMain:FindChild("MailForm")
    mod.button = mailform:FindChild("TakeAllBtn") or GeminiGUI:Create(self.guiDefinition):GetInstance(self, mailform)
-   mod.button:Enable(false)
-end
-
-
-function mod:OnMailboxOpened()
-   mod.atMailbox = true
-   mod.button:Enable(true)
-end
-
-function mod:OnMailboxClosed()
-   mod.atMailbox = false
-   mod.button:Enable(false)
 end
 
 function mod:OnSlashCommand()
-   if mod.atMailbox then 
-      if mod.pendingMails then
-	 mod:FinishMailboxProcess()
-      else
-	 mod:ProcessMailbox()
-      end
+   if mod.pendingMails then
+      mod:FinishMailboxProcess()
+   else
+      mod:ProcessMailbox()
    end
 end
 
@@ -70,6 +67,7 @@ function mod:ProcessMailbox()
    self.pendingMails = pendingMails
    self.mailsToDelete = {}
    self.currentMailIndex = 1
+   self.getCashOnly = false
    mod:ProcessNextBatch()
 end
 
@@ -82,10 +80,15 @@ function mod:ProcessNextBatch()
    local mails = self.pendingMails
 
    local mail, sender, subject, hasMoney, hasAttachments, msgInfo
-   local numProcessed = 0
-   local endIdx = 1
-   for i=startIdx,#mails do
-      endIdx = i
+   local endIdx = #mails
+   local lastProcessedIndex = 0
+   -- do at most 10 mails at a time
+   if endIdx > startIdx + 10 then
+      endIdx = startIdx + 10
+   end
+
+   for i=startIdx,endIdx do
+      lastProcessedIndex = i
       mail = self.pendingMails[i]
       msgInfo = mail:GetMessageInfo()
       sender = msgInfo.strSenderName
@@ -93,29 +96,38 @@ function mod:ProcessNextBatch()
       hasMoney = not msgInfo.monGift:IsZero()
       hasAttachments = #msgInfo.arAttachments > 0
       local processed = false
-      if sender == "Phineas T. Rotostar" then
+      if sender == "Phineas T. Rotostar" or subject == "Here's your stuff!" then
 	 -- Auction house
+	 local shouldDelete = true
 	 if hasAttachments then
-	    mail:TakeAllAttachments()
-	    processed = true
+	    if mod.getCashOnly then
+	       shouldDelete = false
+	    else
+	       mail:TakeAllAttachments()
+	       processed = true
+	    end
 	 end
 	 if hasMoney then
 	    mail:TakeMoney()
 	    processed = true
 	 end
-	 self.mailsToDelete[mail:GetIdStr()] = mail;
-      elseif subject == "Here's your stuff!" then
-	 if hasAttachments then
-	    mail:TakeAllAttachments()
-	    processed = true
+	 if shouldDelete then
+	    local count = #self.mailsToDelete + 1
+	    self.mailsToDelete[#self.mailsToDelete+1] = mail
+	    if count > 20 then
+	       MailSystemLib.DeleteMultipleMessages(self.mailsToDelete)
+	       self.mailsToDelete = {}
+	    end
 	 end
-	 self.mailsToDelete[mail:GetIdStr()] = mail;
-      elseif hasAttachments then
-	 processed = true
-	 mail:TakeAllAttachments()
-      elseif hasMoney then
-	 processed = true
-	 mail:TakeMoney();
+      else
+	 if hasAttachments and not mod.getCashOnly then
+	    processed = true
+	    mail:TakeAllAttachments()
+	 end
+	 if hasMoney then
+	    processed = true
+	    mail:TakeMoney();
+	 end
       end
       if processed then
 	 -- Delay execution 
@@ -123,8 +135,8 @@ function mod:ProcessNextBatch()
       end
    end
 
-   if endIdx < #mails then
-      self.currentMailIndex = endIdx + 1
+   if lastProcessedIndex < #mails then
+      self.currentMailIndex = lastProcessedIndex + 1
       if self.button then self.button:SetText("Cancel ("..(#mails-self.currentMailIndex)..")") end
       if not self.timer then
 	 self.timer = ApolloTimer.Create(0.4, true, "ProcessNextBatch", self)
@@ -139,23 +151,14 @@ function mod:FinishMailboxProcess()
       self.timer:Stop()
       self.timer = nil
    end
-   if self.mailsToDelete then
-      local mailsToDelete = {}
-      for id,mail in pairs(self.mailsToDelete) do
-	 mailsToDelete[#mailsToDelete+1] = mail
-      end
-      if #mailsToDelete > 0 then
-	 Print("Deleting "..#mailsToDelete.." messages.");
-	 MailSystemLib.DeleteMultipleMessages(mailsToDelete)
-      end
+   if #self.mailsToDelete > 0 then
+      MailSystemLib.DeleteMultipleMessages(self.mailsToDelete)
    end
    self.currentMailIndex = nil
    self.pendingMails = nil
    self.mailsToDelete = nil
    if self.button then self.button:SetText("Take All") end
 end
-
-
 -- creating the instance.
 
 local MagicMailInstance = mod:new()
