@@ -3,6 +3,7 @@
 
 local mod = {}
 local GeminiGUI = Apollo.GetPackage("Gemini:GUI-1.0").tPackage
+local MailAddonOnMailResult
 
 function mod:new(o)
    o = o or {}
@@ -44,8 +45,8 @@ function mod:OnMailResult(result)
 end
 
 function mod:OnWindowManagementReady()
-   -- NOOP right now 
    self.mailAddon = Apollo.GetAddon("Mail")
+   MailAddonOnMailResult = self.mailAddon.OnMailResult
    local mailform = self.mailAddon.wndMain:FindChild("MailForm")
    mod.button = mailform:FindChild("TakeAllBtn") or GeminiGUI:Create(self.guiDefinition):GetInstance(self, mailform)
 end
@@ -68,6 +69,9 @@ function mod:ProcessMailbox()
    self.mailsToDelete = {}
    self.currentMailIndex = 1
    self.getCashOnly = false
+   -- quiet down the standard mailbox
+   MailAddonOnMailResult = Apollo.GetAddon("Mail").OnMailResult 
+   Apollo.GetAddon("Mail").OnMailResult = function() end 
    mod:ProcessNextBatch()
 end
 
@@ -158,6 +162,8 @@ function mod:FinishMailboxProcess()
    self.pendingMails = nil
    self.mailsToDelete = nil
    if self.button then self.button:SetText("Take All") end
+   -- restore mail addon handler
+   Apollo.GetAddon("Mail").OnMailResult = MailAddonOnMailResult
 end
 -- creating the instance.
 
