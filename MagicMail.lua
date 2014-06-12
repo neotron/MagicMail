@@ -106,6 +106,7 @@ function MagicMail:ProcessMailbox()
    self.mailsToDelete = {}
    self.currentMailIndex = 1
    self.getCashOnly = false
+   self:Unhook(self.mailAddon, "OnMailResult")
    self:RawHook(self.mailAddon, "OnMailResult")
    self:ProcessNextBatch()
 end
@@ -246,16 +247,21 @@ function MagicMail:MatchPartialName(partial)
    if fetchMore then
       fetchMore, numFound = self:FindMoreMatchesInTable(partial, HousingLib.GetNeighborList(), matches, numFound);
    end
-   local sorted = {}
-   for v in pairs(matches) do
-      sorted[#sorted+1] = v
+   if matches then 
+      local sorted = {q}
+      for v in pairs(matches) do
+	 sorted[#sorted+1] = v
+      end
+      sort(sorted)
+      return sorted
    end
-   sort(sorted)
-   return sorted
 end
 
 function MagicMail:FindMoreMatchesInTable(partial, tbl, matches, numFound)
    local realm, faction, name
+   if not tbl then return
+	 true, numFound
+   end
    for k,v in pairs(tbl) do
       realm = v.realm or v.strRealmName
       faction = v.faction or v.nFactionId
