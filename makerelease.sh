@@ -15,3 +15,4 @@ rm -rf ${DEST}/Libs/GeminiGUI/examples
 find ${DEST} -name '.git*' -o -name "*~" -o -name "makerelease.sh" |xargs rm -rf
 
 zip -r ${DEST}.zip $DEST
+rm -rf $DEST
