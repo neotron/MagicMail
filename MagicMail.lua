@@ -54,7 +54,7 @@ function mod:OnWindowManagementReady()
 end
 
 function mod:OnSlashCommand()
-   if mod.pendingMails then
+   if mod.pendingMails or self.busyTimer then
       mod:FinishMailboxProcess()
    else
       mod:ProcessMailbox()
@@ -62,13 +62,10 @@ function mod:OnSlashCommand()
 end
 
 function mod:ProcessMailbox()
+   mod:StopTimers()
    local pendingMails = MailSystemLib.GetInbox()
    if not #pendingMails then
       return
-   end
-   if self.takeAllTimer then
-      self.takeAllTimer:Stop()
-      self.takeAllTimer = nil
    end
    if self.button then self.button:SetText("Cancel ("..#pendingMails..")") end
    self.pendingMails = pendingMails
@@ -156,42 +153,47 @@ function mod:ProcessNextBatch()
    end
 end
 
+
 function mod:FinishMailboxProcess(busy)
-   if self.timer then
-      self.timer:Stop()
-      self.timer = nil
-   end
-   if self.mailsToDelete and #self.mailsToDelete > 0 then
+   mod:StopTimers()
+   if not busy and self.mailsToDelete and #self.mailsToDelete > 0 then
       MailSystemLib.DeleteMultipleMessages(self.mailsToDelete)
    end
    self.currentMailIndex = nil
    self.pendingMails = nil
    self.mailsToDelete = nil
-   if self.button then
-      if true or busy then 
-	 self.button:SetText("Error (Busy)")
-	 self.button:Enable(false)
-	 self.takeAllTimer = ApolloTimer.Create(3.141596, false, "RestoreButtonText", self);
-      else
-	 self.button:SetText("Take All")
-      end
+   if busy then 
+      self.button:SetText("Busy...")
+      self.busyTimer = ApolloTimer.Create(3.141596, false, "ProcessMailbox", self);
+   else
+      self.button:SetText("Take All")
+      -- restore mail addon handler, after a short delay
+      self.resultTimer = ApolloTimer.Create(0.5, false, "RestoreResultHandler", self)
    end
-   -- restore mail addon handler
-   self.resulttimer = ApolloTimer.Create(0.5, false, "RestoreResultHandler", self)
+
 end
 
 
 function mod:RestoreResultHandler()
    Apollo.GetAddon("Mail").OnMailResult = MailAddonOnMailResult
-   self.resulttimer = nil
+   self.resultTimer = nil
 end
 
-function mod:RestoreButtonText()
-   self.button:SetText("Take All")
-   self.button:Enable(true)
-   self.takeAllTimer = nil
+function mod:StopTimers()
+   if self.timer then
+      self.timer:Stop()
+      self.timer = nil
+   end
+   if self.busyTimer then
+      self.busyTimer:Stop()
+      self.busyTimer = nil
+   end
+   if self.resultTimer then
+      self.resultTimer:Stop()
+      self.resultTimer = nil
+   end
 end
-      
+
 -- creating the instance.
 
 local MagicMailInstance = mod:new()
