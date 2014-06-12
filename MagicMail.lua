@@ -1,25 +1,20 @@
+require "Window"
+require "MailSystemLib"
+require "GameLib"
+require "Apollo"
 
-local mod = {}
+local MagicMail = Apollo.GetPackage("Gemini:Addon-1.1").tPackage:NewAddon("MagicMail", false, { "Mail" }, "Gemini:Hook-1.0" )
 local GeminiGUI = Apollo.GetPackage("Gemini:GUI-1.0").tPackage
-local MailAddonOnMailResult
-local MailAddonComposeOnInfoChanged
 local strupper = string.upper
 local strfind = string.find
 local strlen = string.len
 local sort = table.sort
-local MagicMailInstance
 
-function mod:new(o)
-   o = o or {}
-   setmetatable(o, self)
-   self.__index = self 
-   return o
-end
 
-function mod:Init()
+function MagicMail:OnInitialize()
    Apollo.RegisterAddon(self, false, "Configure", { "Mail" })
    Apollo.RegisterSlashCommand("magmail", "OnSlashCommand", self)
-   mod.guiDefinition = { -- PushButton
+   self.guiDefinition = { -- PushButton
       WidgetType    = "PushButton",
       Text          = "Take All",
       Name = "TakeAllBtn",
@@ -28,16 +23,20 @@ function mod:Init()
       AnchorOffsets = {212,-78,324,-31},
       NormalTextColor = "UI_BtnTextGreenNormal",
       PressedTextColor = "UI_BtnTextGreenPressed",
-      Events = { ButtonSignal = function()
-		    self:OnSlashCommand()
-	       end },
+      Events = {
+	 ButtonSignal = "OnSlashCommand"
+      },
    }
+   Apollo.RegisterEventHandler("WindowManagementAdd",   "OnWindowManagementAdd", self)
    Apollo.RegisterEventHandler("WindowManagementReady", "OnWindowManagementReady", self)
-   Apollo.RegisterEventHandler("MailResult",            "OnMailResult", self)
    Apollo.RegisterEventHandler("GuildRoster",           "OnGuildRoster", self)
    Apollo.RegisterEventHandler("GuildMemberChange",     "OnGuildMemberChange", self)
-   Apollo.RegisterEventHandler("WindowManagementAdd",   "OnWindowManagementAdd", self)
-   
+end
+
+function MagicMail:OnEnable()
+   for _,guild in ipairs(GuildLib.GetGuilds()) do
+      guild:RequestMembers()
+   end
    -- This is used to filter characters in mail recipients
    local charInfo = GameLib.GetAccountRealmCharacter()
    self.character = charInfo.strCharacter
@@ -45,49 +44,41 @@ function mod:Init()
    self.faction = GameLib.GetPlayerUnit():GetFaction()
 end
 
-function mod:OnMailResult(result)
+function MagicMail:OnDisable()
+   self:UnhookAll()
+end
+
+function MagicMail:OnMailResult(luaCaller, result)
    if result == GameLib.CodeEnumGenericError.Mail_MailBoxOutOfRange  or
-      result == GameLib.CodeEnumGenericError.Item_InventoryFull then
+   result == GameLib.CodeEnumGenericError.Item_InventoryFull then
       -- Can still get cash
       Print("Too far away, fetching cash only.")
       self.getCashOnly = true;
    elseif result == GameLib.CodeEnumGenericError.Mail_Busy then
       self:FinishMailboxProcess(true)
    else
-      MailAddonOnMailResult(result)
+      self.hooks[self.mailAddon].OnMailResult(luaCaller, result)
    end
 end
 
-function mod:OnWindowManagementAdd(tbl)
+function MagicMail:OnWindowManagementReady()
+   self.mailAddon = Apollo.GetAddon("Mail")
+   local mailform = self.mailAddon.wndMain:FindChild("MailForm")
+   self.button = mailform:FindChild("TakeAllBtn") or GeminiGUI:Create(self.guiDefinition):GetInstance(self, mailform)
+end
+
+function MagicMail:OnWindowManagementAdd(tbl)
    if tbl and tbl.strName == Apollo.GetString("Mail_ComposeLabel") then
-      MailAddonOnInfoChanged = self.mailAddon.luaComposeMail.OnInfoChanged
-      self.mailAddon.luaComposeMail.OnInfoChanged = self.OnInfoChangedWrapper
+      self:PostHook(self.mailAddon.luaComposeMail, "OnInfoChanged")
       self.composeRecipient = self.mailAddon.luaComposeMail.wndMain:FindChild("NameEntryText")
    end
 end
 
-function mod:OnWindowManagementReady()
-   self.mailAddon = Apollo.GetAddon("Mail")
-   MailAddonOnMailResult = self.mailAddon.OnMailResult
-
-   local mailform = self.mailAddon.wndMain:FindChild("MailForm")
-   self.button = mailform:FindChild("TakeAllBtn") or GeminiGUI:Create(self.guiDefinition):GetInstance(self, mailform)
-   
-   for _,guild in ipairs(GuildLib.GetGuilds()) do
-      guild:RequestMembers()
-   end
-end
-
-function mod:OnInfoChangedWrapper(wndHandler, wndControl)
-   if wndControl ~= wndHandler then
-      return
-   end
-   -- call mail addon method
-   MailAddonOnInfoChanged(self, wndHandler, wndControl)
-
-   if wndControl == MagicMailInstance.composeRecipient then
+function MagicMail:OnInfoChanged(luaCaller, wndHandler, wndControl)
+   Print("OnInfoChanged")
+   if wndControl == self.composeRecipient then
       local partial = wndControl:GetText()
-      local matches = MagicMailInstance:MatchPartialName(partial)
+      local matches = self:MatchPartialName(partial)
       if matches and  #matches > 0 then
 	 -- temporary until list is added
 	 wndControl:SetText(matches[1])
@@ -96,7 +87,7 @@ function mod:OnInfoChangedWrapper(wndHandler, wndControl)
    end
 end
 
-function mod:OnSlashCommand()
+function MagicMail:OnSlashCommand()
    if self.pendingMails or self.busyTimer then
       self:FinishMailboxProcess()
    else
@@ -104,7 +95,7 @@ function mod:OnSlashCommand()
    end
 end
 
-function mod:ProcessMailbox()
+function MagicMail:ProcessMailbox()
    self:StopTimers()
    local pendingMails = MailSystemLib.GetInbox()
    if not #pendingMails then
@@ -115,13 +106,11 @@ function mod:ProcessMailbox()
    self.mailsToDelete = {}
    self.currentMailIndex = 1
    self.getCashOnly = false
-   -- quiet down the standard mailbox
-   MailAddonOnMailResult = Apollo.GetAddon("Mail").OnMailResult
-   Apollo.GetAddon("Mail").OnMailResult = function() end 
+   self:RawHook(self.mailAddon, "OnMailResult")
    self:ProcessNextBatch()
 end
 
-function mod:ProcessNextBatch()
+function MagicMail:ProcessNextBatch()
    if not self.pendingMails then
       return
    end
@@ -133,8 +122,8 @@ function mod:ProcessNextBatch()
    local endIdx = #mails
    local lastProcessedIndex = 0
    -- do at most 10 mails at a time
-   if endIdx > startIdx + 10 then
-      endIdx = startIdx + 10
+   if endIdx > startIdx + 20 then
+      endIdx = startIdx + 20
    end
 
    for i=startIdx,endIdx do
@@ -164,7 +153,7 @@ function mod:ProcessNextBatch()
 	 if shouldDelete then
 	    local count = #self.mailsToDelete + 1
 	    self.mailsToDelete[#self.mailsToDelete+1] = mail
-	    if count > 20 then
+	    if count >= 10 then
 	       MailSystemLib.DeleteMultipleMessages(self.mailsToDelete)
 	       self.mailsToDelete = {}
 	    end
@@ -189,7 +178,7 @@ function mod:ProcessNextBatch()
       self.currentMailIndex = lastProcessedIndex + 1
       if self.button then self.button:SetText("Cancel ("..(#mails-self.currentMailIndex)..")") end
       if not self.timer then
-	 self.timer = ApolloTimer.Create(0.4, true, "ProcessNextBatch", self)
+	 self.timer = ApolloTimer.Create(0.2, true, "ProcessNextBatch", self)
       end
    else 
       self:FinishMailboxProcess()
@@ -197,7 +186,7 @@ function mod:ProcessNextBatch()
 end
 
 
-function mod:FinishMailboxProcess(busy)
+function MagicMail:FinishMailboxProcess(busy)
    self:StopTimers()
    if not busy and self.mailsToDelete and #self.mailsToDelete > 0 then
       MailSystemLib.DeleteMultipleMessages(self.mailsToDelete)
@@ -216,13 +205,12 @@ function mod:FinishMailboxProcess(busy)
 
 end
 
-
-function mod:RestoreResultHandler()
-   Apollo.GetAddon("Mail").OnMailResult = MailAddonOnMailResult
+function MagicMail:RestoreResultHandler()
+   self:Unhook(self.mailAddon, "OnMailResult")
    self.resultTimer = nil
 end
 
-function mod:StopTimers()
+function MagicMail:StopTimers()
    if self.timer then
       self.timer:Stop()
       self.timer = nil
@@ -239,7 +227,7 @@ end
 
 -- AutoCompletion management
 -- This method returns a list of matching friends, up to a maximum of 10
-function mod:MatchPartialName(partial)
+function MagicMail:MatchPartialName(partial)
    if strlen(partial or "") == 0 then
       return nil
    end
@@ -266,7 +254,7 @@ function mod:MatchPartialName(partial)
    return sorted
 end
 
-function mod:FindMoreMatchesInTable(partial, tbl, matches, numFound)
+function MagicMail:FindMoreMatchesInTable(partial, tbl, matches, numFound)
    local realm, faction, name
    for k,v in pairs(tbl) do
       realm = v.realm or v.strRealmName
@@ -289,12 +277,12 @@ function mod:FindMoreMatchesInTable(partial, tbl, matches, numFound)
    return true, numFound
 end
 
-function mod:GuildId(guildCurr)
+function MagicMail:GuildId(guildCurr)
    return guildCurr:GetType()..":"..guildCurr:GetName()
 end
 
 
-function mod:OnGuildMemberChange( guildCurr )
+function MagicMail:OnGuildMemberChange( guildCurr )
    if guildCurr and guildCurr:GetType() == GuildLib.GuildType_Guild then
       if self.guildRoster then
 	 self.guildRoster[self:GuildId(guildCurr)] = nil
@@ -304,7 +292,7 @@ function mod:OnGuildMemberChange( guildCurr )
 end
 
 -- Update roster for a guild. We only care about the name since guilds are realm specific
-function mod:OnGuildRoster(guildCurr, roster)   
+function MagicMail:OnGuildRoster(guildCurr, roster)   
    if not self.guildRoster then self.guildRoster = {} end
    -- circles and guilds can have the same name, make them unique
    local guildName =  self:GuildId(guildCurr)
@@ -319,5 +307,3 @@ function mod:OnGuildRoster(guildCurr, roster)
 end
 -- creating the instance.
 
-MagicMailInstance = mod:new()
-MagicMailInstance:Init()
