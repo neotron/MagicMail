@@ -40,7 +40,9 @@ function mod:OnMailResult(result)
       Print("Too far away, fetching cash only.")
       mod.getCashOnly = true;
    elseif result == GameLib.CodeEnumGenericError.Mail_Busy then
-      mod:FinishMailboxProcess()
+      mod:FinishMailboxProcess(true)
+   else
+      MailAddonOnMailResult(result)
    end
 end
 
@@ -64,13 +66,17 @@ function mod:ProcessMailbox()
    if not #pendingMails then
       return
    end
+   if self.takeAllTimer then
+      self.takeAllTimer:Stop()
+      self.takeAllTimer = nil
+   end
    if self.button then self.button:SetText("Cancel ("..#pendingMails..")") end
    self.pendingMails = pendingMails
    self.mailsToDelete = {}
    self.currentMailIndex = 1
    self.getCashOnly = false
    -- quiet down the standard mailbox
-   MailAddonOnMailResult = Apollo.GetAddon("Mail").OnMailResult 
+   MailAddonOnMailResult = Apollo.GetAddon("Mail").OnMailResult
    Apollo.GetAddon("Mail").OnMailResult = function() end 
    mod:ProcessNextBatch()
 end
@@ -150,21 +156,42 @@ function mod:ProcessNextBatch()
    end
 end
 
-function mod:FinishMailboxProcess()
+function mod:FinishMailboxProcess(busy)
    if self.timer then
       self.timer:Stop()
       self.timer = nil
    end
-   if #self.mailsToDelete > 0 then
+   if self.mailsToDelete and #self.mailsToDelete > 0 then
       MailSystemLib.DeleteMultipleMessages(self.mailsToDelete)
    end
    self.currentMailIndex = nil
    self.pendingMails = nil
    self.mailsToDelete = nil
-   if self.button then self.button:SetText("Take All") end
+   if self.button then
+      if true or busy then 
+	 self.button:SetText("Error (Busy)")
+	 self.button:Enable(false)
+	 self.takeAllTimer = ApolloTimer.Create(3.141596, false, "RestoreButtonText", self);
+      else
+	 self.button:SetText("Take All")
+      end
+   end
    -- restore mail addon handler
-   Apollo.GetAddon("Mail").OnMailResult = MailAddonOnMailResult
+   self.resulttimer = ApolloTimer.Create(0.5, false, "RestoreResultHandler", self)
 end
+
+
+function mod:RestoreResultHandler()
+   Apollo.GetAddon("Mail").OnMailResult = MailAddonOnMailResult
+   self.resulttimer = nil
+end
+
+function mod:RestoreButtonText()
+   self.button:SetText("Take All")
+   self.button:Enable(true)
+   self.takeAllTimer = nil
+end
+      
 -- creating the instance.
 
 local MagicMailInstance = mod:new()
