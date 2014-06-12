@@ -12,7 +12,6 @@ local sort = table.sort
 
 
 function MagicMail:OnInitialize()
-   Apollo.RegisterAddon(self, false, "Configure", { "Mail" })
    Apollo.RegisterSlashCommand("magmail", "OnSlashCommand", self)
    self.guiDefinition = { -- PushButton
       WidgetType    = "PushButton",
@@ -170,8 +169,8 @@ function MagicMail:ProcessNextBatch()
 	 end
       end
       if processed then
-	 -- Delay execution 
-	 break 
+	 -- Delay execution
+	 break
       end
    end
 
@@ -181,7 +180,7 @@ function MagicMail:ProcessNextBatch()
       if not self.timer then
 	 self.timer = ApolloTimer.Create(0.2, true, "ProcessNextBatch", self)
       end
-   else 
+   else
       self:FinishMailboxProcess()
    end
 end
@@ -195,7 +194,7 @@ function MagicMail:FinishMailboxProcess(busy)
    self.currentMailIndex = nil
    self.pendingMails = nil
    self.mailsToDelete = nil
-   if busy then 
+   if busy then
       self.button:SetText("Busy...")
       self.busyTimer = ApolloTimer.Create(3.141596, false, "ProcessMailbox", self);
    else
@@ -247,7 +246,7 @@ function MagicMail:MatchPartialName(partial)
    if fetchMore then
       fetchMore, numFound = self:FindMoreMatchesInTable(partial, HousingLib.GetNeighborList(), matches, numFound);
    end
-   if matches then 
+   if matches then
       local sorted = {q}
       for v in pairs(matches) do
 	 sorted[#sorted+1] = v
@@ -298,7 +297,7 @@ function MagicMail:OnGuildMemberChange( guildCurr )
 end
 
 -- Update roster for a guild. We only care about the name since guilds are realm specific
-function MagicMail:OnGuildRoster(guildCurr, roster)   
+function MagicMail:OnGuildRoster(guildCurr, roster)
    if not self.guildRoster then self.guildRoster = {} end
    -- circles and guilds can have the same name, make them unique
    local guildName =  self:GuildId(guildCurr)
@@ -306,10 +305,9 @@ function MagicMail:OnGuildRoster(guildCurr, roster)
    for _,member in ipairs(memberNames) do
       roster[member] = nil
    end
-   for _,member in ipairs(roster) do 
+   for _,member in ipairs(roster) do
       memberNames[#memberNames + 1] = { name = member.strName }
    end
    self.guildRoster[guildName] = memberNames
 end
 -- creating the instance.
-
