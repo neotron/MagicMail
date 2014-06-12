@@ -276,7 +276,9 @@ function mod:FindMoreMatchesInTable(partial, tbl, matches, numFound)
 	 and (not realm or realm == self.realm)
 	 and (not faction or faction == self.faction)
          and (strfind(strupper(name), partial) == 1)
-	 and not matches[name] then
+	 and not matches[name]
+	 and (v.bIgnore == nil or v.bIgnore == false)
+      then
 	    matches[name] = true
 	    numFound = numFound +1
       end
