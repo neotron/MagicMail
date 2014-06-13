@@ -41,7 +41,7 @@ local completionDefinition = {
 
 local nameButtonDefinition = {
    WidgetType     = "PushButton",
-   Base           = "CRB_Basekit:kitBtn_Holo_DatachronOptiono",
+   Base           = "CRB_Basekit:kitBtn_Holo_DatachronOption",
    Text           = "",
    TextThemeColor = "ffffffff", 
    AnchorCenter = { 280, 30 }, 
