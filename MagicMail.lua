@@ -9,23 +9,49 @@ local strupper = string.upper
 local strfind = string.find
 local strlen = string.len
 local sort = table.sort
+local buttonDefinition = { 
+   WidgetType    = "PushButton",
+   Text          = "Take All",
+   Name = "MMTakeAllBtn",
+   Base = "CRB_Basekit:kitBtn_Metal_LargeGreen",
+   AnchorPoints = { 0, 1, 0, 1 },
+   AnchorOffsets = {212,-78,324,-31},
+   NormalTextColor = "UI_BtnTextGreenNormal",
+   PressedTextColor = "UI_BtnTextGreenPressed",
+   Events = {
+      ButtonSignal = "OnSlashCommand"
+   },
+}
+   
+local completionDefinition = {
+   Name          = "MMCompletionWindow",
+   Picture       = true,
+   Border        = true,
+   NewWindowDepth = true, 
+   Sizable       = false,
+   AnchorOffsets  = { 95, 67, 405, 500 },
+   Children = {
+      {
+	 Name = "NameContainer",
+	 AnchorPoints = "FILL",
+	 AnchorOffsets = { 3, 3, 3, 3 }, 
+      },
+   },
+}
 
+local nameButtonDefinition = {
+   WidgetType     = "PushButton",
+   Base           = "CRB_Basekit:kitBtn_Holo_DatachronOption",
+   Text           = "",
+   TextThemeColor = "ffffffff", 
+   AnchorCenter = { 280, 30 }, 
+   Events = {
+      ButtonSignal = "OnNameSelected"
+   }
+}
 
 function MagicMail:OnInitialize()
    Apollo.RegisterSlashCommand("magmail", "OnSlashCommand", self)
-   self.guiDefinition = { -- PushButton
-      WidgetType    = "PushButton",
-      Text          = "Take All",
-      Name = "TakeAllBtn",
-      Base = "CRB_Basekit:kitBtn_Metal_LargeGreen",
-      AnchorPoints = { 0, 1, 0, 1 },
-      AnchorOffsets = {212,-78,324,-31},
-      NormalTextColor = "UI_BtnTextGreenNormal",
-      PressedTextColor = "UI_BtnTextGreenPressed",
-      Events = {
-	 ButtonSignal = "OnSlashCommand"
-      },
-   }
    Apollo.RegisterEventHandler("WindowManagementAdd",   "OnWindowManagementAdd", self)
    Apollo.RegisterEventHandler("WindowManagementReady", "OnWindowManagementReady", self)
    Apollo.RegisterEventHandler("GuildRoster",           "OnGuildRoster", self)
@@ -63,26 +89,64 @@ end
 function MagicMail:OnWindowManagementReady()
    self.mailAddon = Apollo.GetAddon("Mail")
    local mailform = self.mailAddon.wndMain:FindChild("MailForm")
-   self.button = mailform:FindChild("TakeAllBtn") or GeminiGUI:Create(self.guiDefinition):GetInstance(self, mailform)
+   self.button = mailform:FindChild("MMTakeAllBtn") or GeminiGUI:Create(buttonDefinition):GetInstance(self, mailform)
 end
 
 function MagicMail:OnWindowManagementAdd(tbl)
    if tbl and tbl.strName == Apollo.GetString("Mail_ComposeLabel") then
       self:PostHook(self.mailAddon.luaComposeMail, "OnInfoChanged")
       self.composeRecipient = self.mailAddon.luaComposeMail.wndMain:FindChild("NameEntryText")
+      self.composeRecipient:AddEventHandler("EditBoxTab", "MMOnEditBoxNext")
+      self.composeRecipient:AddEventHandler("EditBoxReturn", "MMOnEditBoxNext")
+      self.composeRecipient:AddEventHandler("EditBoxEscape", "MMOnEditBoxClear")
+      local this = self
+      self.mailAddon.luaComposeMail.MMOnEditBoxNext = function()
+	 this:OnEditBoxNext()
+      end
+      self.mailAddon.luaComposeMail.MMOnEditBoxClear = function()
+	 this:OnEditBoxClear()
+      end
+      local mailcompose = self.mailAddon.luaComposeMail.wndMain:FindChild("MessageEntryComplex")
+      self.completionWindow = mailcompose:FindChild("MMCompletionWindow") or GeminiGUI:Create(completionDefinition):GetInstance(self, mailcompose)
+      self.completionWindow:Show(false)
    end
 end
 
+function MagicMail:OnEditBoxNext()
+   self:OnEditBoxClear()
+end
+
+function MagicMail:OnEditBoxClear()
+   self.composeRecipient:SetStyleEx("WantTab", false)
+   self.completionWindow:Show(false)
+end
+
+
 function MagicMail:OnInfoChanged(luaCaller, wndHandler, wndControl)
-   Print("OnInfoChanged")
    if wndControl == self.composeRecipient then
       local partial = wndControl:GetText()
       local matches = self:MatchPartialName(partial)
+      self.matchWindows = self.matchWindows or {}
+      for _,btn in ipairs(self.matchWindows) do
+	 btn:Destroy()
+      end
+      local parent = self.completionWindow:FindChild("NameContainer")
       if matches and  #matches > 0 then
 	 -- temporary until list is added
 	 wndControl:SetText(matches[1])
 	 wndControl:SetSel(partial:len(), -1)
+	 for i=2,#matches do
+	    local btn =  GeminiGUI:Create(nameButtonDefinition):GetInstance(self, parent);
+	    btn:SetText(matches[i])
+	    self.matchWindows[#self.matchWindows+1] = btn
+	 end
       end
+      local hasMatches  = #self.matchWindows > 0
+      if hasMatches then
+	 parent:ArrangeChildrenVert()
+      end
+      self.completionWindow:Show(hasMatches);
+      self.composeRecipient:SetStyleEx("WantTab", hasMatches)
    end
 end
 
@@ -227,6 +291,12 @@ end
 
 -- AutoCompletion management
 -- This method returns a list of matching friends, up to a maximum of 10
+
+function MagicMail:OnNameSelected(ctr)
+   self.composeRecipient:SetText(ctr:GetText());
+   self.completionWindow:Show(false)
+end
+
 function MagicMail:MatchPartialName(partial)
    if strlen(partial or "") == 0 then
       return nil
