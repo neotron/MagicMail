@@ -1,4 +1,5 @@
 require "Window"
+
 require "MailSystemLib"
 require "GameLib"
 require "Apollo"
@@ -9,6 +10,9 @@ local strupper = string.upper
 local strfind = string.find
 local strlen = string.len
 local sort = table.sort
+
+local MAX_RECENT_CHARS = 8
+
 local buttonDefinition = { 
    WidgetType    = "PushButton",
    Text          = "Take All",
@@ -51,6 +55,8 @@ local nameButtonDefinition = {
 }
 
 function MagicMail:OnInitialize()
+   self.db = Apollo.GetPackage("Gemini:DB-1.0").tPackage:New(self,  self:GetConfigDefaults())
+
    Apollo.RegisterSlashCommand("magmail", "OnSlashCommand", self)
    Apollo.RegisterEventHandler("WindowManagementAdd",   "OnWindowManagementAdd", self)
    Apollo.RegisterEventHandler("WindowManagementReady", "OnWindowManagementReady", self)
@@ -62,11 +68,8 @@ function MagicMail:OnEnable()
    for _,guild in ipairs(GuildLib.GetGuilds()) do
       guild:RequestMembers()
    end
-   -- This is used to filter characters in mail recipients
-   local charInfo = GameLib.GetAccountRealmCharacter()
-   self.character = charInfo.strCharacter
-   self.realm = charInfo.strRealm
-   self.faction = GameLib.GetPlayerUnit():GetFaction()
+   
+   self:AddSelfAsAlt()
 end
 
 function MagicMail:OnDisable()
@@ -95,6 +98,7 @@ end
 function MagicMail:OnWindowManagementAdd(tbl)
    if tbl and tbl.strName == Apollo.GetString("Mail_ComposeLabel") then
       self:PostHook(self.mailAddon.luaComposeMail, "OnInfoChanged")
+      self:Hook(self.mailAddon.luaComposeMail, "OnEmailSent")
       self.composeRecipient = self.mailAddon.luaComposeMail.wndMain:FindChild("NameEntryText")
       self.composeRecipient:AddEventHandler("EditBoxTab", "MMOnEditBoxNext")
       self.composeRecipient:AddEventHandler("EditBoxReturn", "MMOnEditBoxNext")
@@ -178,6 +182,7 @@ function MagicMail:ProcessNextBatch()
    if not self.pendingMails then
       return
    end
+   self.mailsToDelete = self.mailsToDelete or {}
    local startIdx = self.currentMailIndex or 1
    local isLastBatch = false
    local mails = self.pendingMails
@@ -259,14 +264,30 @@ function MagicMail:FinishMailboxProcess(busy)
    self.pendingMails = nil
    self.mailsToDelete = nil
    if busy then
-      self.button:SetText("Busy...")
-      self.busyTimer = ApolloTimer.Create(3.141596, false, "ProcessMailbox", self);
+      self.busyTimeout = (self.busyTimeout or 2) + 1
+      if self.busyTimeout > 10 then
+	 self.busyTimeout = 10
+      end
+      self.busyTimerRemaining = self.busyTimeout-1
+      self.button:SetText("Busy ("..self.busyTimeout..")")
+      self.busyTimer = ApolloTimer.Create(1, true, "CountDownBusyTimer", self);
    else
       self.button:SetText("Take All")
       -- restore mail addon handler, after a short delay
       self.resultTimer = ApolloTimer.Create(0.5, false, "RestoreResultHandler", self)
+      self.busyTimeout = nil
    end
+end
 
+function  MagicMail:CountDownBusyTimer()
+   self.button:SetText("Busy ("..self.busyTimerRemaining..")")
+   self.busyTimerRemaining = self.busyTimerRemaining - 1
+   if self.busyTimerRemaining < 0 then
+      self.busyTimer:Stop()
+      self.busyTimer = nil
+      self:ProcessMailbox()
+      return
+   end
 end
 
 function MagicMail:RestoreResultHandler()
@@ -303,33 +324,32 @@ function MagicMail:MatchPartialName(partial)
    end
    local matches = {}
    partial = strupper(partial)
-   local numFound = 0
    local fetchMore
-   fetchMore, numFound = self:FindMoreMatchesInTable(partial, FriendshipLib.GetList(), matches, numFound);
+   fetchMore = self:FindMoreMatchesInTable(partial, self.db.realm.alts, matches)
+   fetchMore = self:FindMoreMatchesInTable(partial, self.db.realm.recent, matches)
 
-   for _,roster in pairs(self.guildRoster) do
-      if fetchMore then
-	 fetchMore, numFound = self:FindMoreMatchesInTable(partial, roster, matches, numFound);
+   if fetchMore then
+      fetchMore = self:FindMoreMatchesInTable(partial, FriendshipLib.GetList(), matches);
+   end
+   if self.guildRoster then
+      for _,roster in pairs(self.guildRoster) do
+	 if fetchMore then
+	    fetchMore = self:FindMoreMatchesInTable(partial, roster, matches);
+	 end
       end
    end
 
    if fetchMore then
-      fetchMore, numFound = self:FindMoreMatchesInTable(partial, HousingLib.GetNeighborList(), matches, numFound);
+      fetchMore = self:FindMoreMatchesInTable(partial, HousingLib.GetNeighborList(), matches);
    end
-   if matches then
-      local sorted = {q}
-      for v in pairs(matches) do
-	 sorted[#sorted+1] = v
-      end
-      sort(sorted)
-      return sorted
-   end
+   sort(matches)
+   return matches
 end
 
-function MagicMail:FindMoreMatchesInTable(partial, tbl, matches, numFound)
+function MagicMail:FindMoreMatchesInTable(partial, tbl, matches)
    local realm, faction, name
    if not tbl then return
-	 true, numFound
+	 true
    end
    for k,v in pairs(tbl) do
       realm = v.realm or v.strRealmName
@@ -343,13 +363,13 @@ function MagicMail:FindMoreMatchesInTable(partial, tbl, matches, numFound)
 	 and (v.bIgnore == nil or v.bIgnore == false)
       then
 	    matches[name] = true
-	    numFound = numFound +1
+	    matches[#matches + 1] = name
       end
-      if numFound >= 10 then
-	 return false, numFound
+      if #matches >= 8 then
+	 return false
       end
    end
-   return true, numFound
+   return true
 end
 
 function MagicMail:GuildId(guildCurr)
@@ -366,6 +386,54 @@ function MagicMail:OnGuildMemberChange( guildCurr )
    end
 end
 
+function MagicMail:OnEmailSent(luaHandler, wndHandler, wndControl, bSuccess)
+   if bSuccess then
+      self:AddRecentRecipient(self.composeRecipient:GetText());
+      self:Unhook(self.mailAddon.luaComposeMail, "OnEmailSent")
+      self:Unhook(self.mailAddon.luaComposeMail, "OnInfoChanged")
+   end
+end
+
+function MagicMail:AddRecentRecipient(name)
+   local recents = self.db.realm.recents
+   local oldestTimestamp 
+   local oldestKey 
+   for k,v in pairs(recents) do
+      if v.name == self.character then
+	 return
+      end
+      if oldestTimestamp == nil or v.t < oldestTimestamp then
+	 oldestTimestamp = v.t
+	 oldestKey = k
+      end
+   end
+   local newChar = {
+      name = name,
+      faction = self.faction,
+      t = os.time()
+   }
+   if #recents >= MAX_RECENT_CHARS then
+      recents[oldestKey] = newChar
+   else
+      recents[#recents + 1] = newChar
+   end
+end
+
+function MagicMail:AddSelfAsAlt()
+   -- This is used to filter characters in mail recipients
+   local charInfo = GameLib.GetAccountRealmCharacter()
+   self.character = charInfo.strCharacter
+   self.faction = GameLib.GetPlayerUnit():GetFaction()
+   local alts = self.db.realm.alts
+   for k,v in pairs(alts) do
+      if v.name == self.character then
+	 return
+      end
+   end
+   alts[#alts+1] = { name = self.character, faction = self.faction }
+end
+
+
 -- Update roster for a guild. We only care about the name since guilds are realm specific
 function MagicMail:OnGuildRoster(guildCurr, roster)
    if not self.guildRoster then self.guildRoster = {} end
@@ -380,4 +448,12 @@ function MagicMail:OnGuildRoster(guildCurr, roster)
    end
    self.guildRoster[guildName] = memberNames
 end
--- creating the instance.
+
+function MagicMail:GetConfigDefaults() 
+   return {
+      realm = {
+	 alts = {},
+	 recents = {}
+      }
+   }
+end

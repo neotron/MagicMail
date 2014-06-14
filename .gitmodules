@@ -7,3 +7,6 @@
 [submodule "Libs/GeminiAddon"]
 	path = Libs/GeminiAddon
 	url = https://github.com/wildstarnasa/GeminiAddon.git
+[submodule "Libs/GeminiDB"]
+	path = Libs/GeminiDB
+	url = https://github.com/wildstarnasa/GeminiDB.git
