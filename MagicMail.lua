@@ -182,7 +182,7 @@ function MagicMail:ProcessNextBatch()
    if not self.pendingMails then
       return
    end
-   self.mailsToDelete = self.mailsToDelete or {}
+   local mailsToDelete = self.mailsToDelete or {}
    local startIdx = self.currentMailIndex or 1
    local isLastBatch = false
    local mails = self.pendingMails
@@ -220,11 +220,11 @@ function MagicMail:ProcessNextBatch()
 	    processed = true
 	 end
 	 if shouldDelete then
-	    local count = #self.mailsToDelete + 1
-	    self.mailsToDelete[#self.mailsToDelete+1] = mail
+	    local count = #mailsToDelete + 1
+	    mailsToDelete[#mailsToDelete+1] = mail
 	    if count >= 10 then
-	       MailSystemLib.DeleteMultipleMessages(self.mailsToDelete)
-	       self.mailsToDelete = {}
+	       MailSystemLib.DeleteMultipleMessages(mailsToDelete)
+	       mailsToDelete = {}
 	    end
 	 end
       else
@@ -242,7 +242,7 @@ function MagicMail:ProcessNextBatch()
 	 break
       end
    end
-
+   self.mailsToDelete = mailsToDelete
    if lastProcessedIndex < #mails then
       self.currentMailIndex = lastProcessedIndex + 1
       if self.button then self.button:SetText("Cancel ("..(#mails-self.currentMailIndex)..")") end
@@ -265,8 +265,8 @@ function MagicMail:FinishMailboxProcess(busy)
    self.mailsToDelete = nil
    if busy then
       self.busyTimeout = (self.busyTimeout or 2) + 1
-      if self.busyTimeout > 10 then
-	 self.busyTimeout = 10
+      if self.busyTimeout > 6 then
+	 self.busyTimeout = 6
       end
       self.busyTimerRemaining = self.busyTimeout-1
       self.button:SetText("Busy ("..self.busyTimeout..")")
