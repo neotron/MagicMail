@@ -135,7 +135,6 @@ function MagicMail:OnWindowManagementAdd(tbl)
       self.wndCashSendBtn = wndMain:FindChild("CashSendBtn")
       self.wndCashCODBtn  = wndMain:FindChild("CashCODBtn")
       self.wndCashWindow = wndMain:FindChild("CashWindow")
-
    end
 end
 
@@ -206,8 +205,21 @@ function MagicMail:UpdateMailMessageAndSubject()
 	 body = "Gift: "..amount.."\n\n"..body
       end
    end
-   self.subjectEntryText:SetText(subject or  "")
-   self.messageEntryText:SetText(body or "")
+   local currentSubject = self.subjectEntryText:GetText()
+   local currentMessage = self.messageEntryText:GetText()
+
+   local shouldModifySubject = self.hasModifiedMessage and currentSubject == self.lastAutoSubject or currentSubject == "" 
+   local shouldModifyMessage = self.hasModifiedMessage and currentMessage == self.lastAutoMessage or currentSubject == "" 
+
+   if shouldModifySubject then
+      self.subjectEntryText:SetText(subject)
+   end
+   if shouldModifyMessage then
+      self.messageEntryText:SetText(body)
+   end
+
+   self.hasModifiedMessage =  subject ~= ""
+   
 end
 
 function MagicMail:ShortFormatGold(amount)
@@ -494,6 +506,9 @@ function MagicMail:OnEmailSent(luaHandler, wndHandler, wndControl, bSuccess)
       for hook in pairs(self.hooks[self.mailAddon.luaComposeMail] or {}) do
 	 self:Unhook(self.mailAddon.luaComposeMail, hook)
       end
+      self.lastAutoSubject = nil
+      self.lastAutoMessage = nil
+      self.hasModifiedMessage = nil
    end
 end
 

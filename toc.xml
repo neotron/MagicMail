@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Addon Author="NeoTron" APIVersion="8" Name="MagicMail 1.5" Description="Adds functionality to rapidly fetch all items and money from mails.">
+<Addon Author="NeoTron" APIVersion="8" Name="MagicMail 1.5.1" Description="Adds functionality to rapidly fetch all items and money from mails.">
   <Script Name="Libs/GeminiAddon/GeminiAddon.lua"/>
   <Script Name="Libs/GeminiGUI/GeminiGUI.lua"/>
   <Script Name="Libs/GeminiHook/GeminiHook-1.0.lua"/>
