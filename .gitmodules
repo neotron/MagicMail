@@ -13,3 +13,9 @@
 [submodule "Libs/GeminiLogging"]
 	path = Libs/GeminiLogging
 	url = https://github.com/wildstarnasa/GeminiLogging.git
+[submodule "Libs/LibDialog"]
+	path = Libs/LibDialog
+	url = https://github.com/wildstarnasa/LibDialog.git
+[submodule "Libs/LibError"]
+	path = Libs/LibError
+	url = https://github.com/wildstarnasa/LibError.git

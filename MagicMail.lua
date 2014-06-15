@@ -7,6 +7,7 @@ require "Apollo"
 local MagicMail = Apollo.GetPackage("Gemini:Addon-1.1").tPackage:NewAddon("MagicMail", false, { "Mail" }, "Gemini:Hook-1.0" )
 local GeminiGUI = Apollo.GetPackage("Gemini:GUI-1.0").tPackage
 local GeminiLogging = Apollo.GetPackage("Gemini:Logging-1.2").tPackage
+local DLG = Apollo.GetPackage("Gemini:LibDialog-1.0").tPackage
 local strupper = string.upper
 local strfind = string.find
 local strlen = string.len
@@ -57,6 +58,21 @@ local nameButtonDefinition = {
    }
 }
 
+
+local ignoreButtonDefinition = {
+   Name = "MMIgnoreButton",
+   WidgetType     = "PushButton",
+   Base           = "BK3:btnHolo_Red_Small",
+   Text           = "Ignore",
+   TextThemeColor = "UI_BtnTextRedNormal",
+   PressedTextColor = "UI_BtnTextRedPressed",
+   AnchorPoints = { 0, 0, 0, 0 },
+   AnchorOffsets = {194, 18, 299, 71},
+   Events = {
+      ButtonSignal = "OnIgnoreMail"
+   }
+}
+
 function MagicMail:OnInitialize()
    self.db = Apollo.GetPackage("Gemini:DB-1.0").tPackage:New(self,  self:GetConfigDefaults())
 
@@ -80,7 +96,27 @@ function MagicMail:OnEnable()
    end
    
    self:AddSelfAsAlt()
-   
+
+   DLG:Register("IgnoreConfirmDialog",
+		{
+		   buttons = {
+		      {
+			 text = Apollo.GetString("CRB_Yes"),
+			 OnClick = function(settings, data, reason)
+			    FriendshipLib.AddByName(FriendshipLib.CharacterFriendshipType_Ignore,
+						    settings.tData.strSenderName,
+						    settings.tData.strRealm, "Ignored by MagicMail")
+			 end,
+		      },
+		      {
+			 color = "Red",
+			 text = Apollo.GetString("CRB_No"),
+		      },
+		   },
+		   text = "Do you want to ignore this user? All mails from the ignored user will be returned. Ignored users are added to your normal ignore list.",
+		   noCloseButton = true,
+		   showWhileDead = true,
+   })
 end
 
 function MagicMail:OnDisable()
@@ -104,6 +140,7 @@ function MagicMail:OnWindowManagementReady()
    self.mailAddon = Apollo.GetAddon("Mail")
    local mailform = self.mailAddon.wndMain:FindChild("MailForm")
    self.button = mailform:FindChild("MMTakeAllBtn") or GeminiGUI:Create(buttonDefinition):GetInstance(self, mailform)
+   self:PostHook(self.mailAddon, "OpenReceivedMessage", "SetUpIgnoreButton")
 end
 
 function MagicMail:OnWindowManagementAdd(tbl)
@@ -116,13 +153,10 @@ function MagicMail:OnWindowManagementAdd(tbl)
       self:Hook(composeMail, "UpdateControls", "UpdateAttachments")
       
       self.composeRecipient = wndMain:FindChild("NameEntryText")
-      self.composeRecipient:AddEventHandler("EditBoxTab", "MMOnEditBoxNext")
-      self.composeRecipient:AddEventHandler("EditBoxReturn", "MMOnEditBoxNext")
+      self.composeRecipient:AddEventHandler("EditBoxTab", "MMOnEditBoxClear")
+      self.composeRecipient:AddEventHandler("EditBoxReturn", "MMOnEditBoxClear")
       self.composeRecipient:AddEventHandler("EditBoxEscape", "MMOnEditBoxClear")
       local this = self
-      composeMail.MMOnEditBoxNext = function()
-	 this:OnEditBoxNext()
-      end
       composeMail.MMOnEditBoxClear = function()
 	 this:OnEditBoxClear()
       end
@@ -138,8 +172,29 @@ function MagicMail:OnWindowManagementAdd(tbl)
    end
 end
 
-function MagicMail:OnEditBoxNext()
-   self:OnEditBoxClear()
+function MagicMail:SetUpIgnoreButton(luaCaller, msgMail)
+   local msgInfo = msgMail:GetMessageInfo()
+   for _,alt in ipairs(self.db.realm.alts) do
+      if alt.name == msgInfo.strSenderName then
+	 -- don't ignore myself!
+	 return
+      end
+   end
+
+   if msgInfo.eSenderType == MailSystemLib.EmailType_Character then
+      local strId = msgMail:GetIdStr()
+      local mailWindow = self.mailAddon.tOpenMailMessages[strId]
+      if not mailWindow then return end
+      local parent = mailWindow.wndMain:FindChild("ContentComplex")
+      local ignoreBtn = parent:FindChild("MMIgnoreButton") or GeminiGUI:Create(ignoreButtonDefinition):GetInstance(self, parent)
+      ignoreBtn:SetData(msgInfo)
+   end
+end
+
+function MagicMail:OnIgnoreMail(wndMain, wndCtr)
+   local data = wndCtr:GetData()
+   data.strRealm = self.realm
+   DLG:Spawn("IgnoreConfirmDialog", data)
 end
 
 function MagicMail:OnEditBoxClear()
