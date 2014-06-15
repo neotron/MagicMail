@@ -209,7 +209,7 @@ function MagicMail:UpdateMailMessageAndSubject()
    local currentMessage = self.messageEntryText:GetText()
 
    local shouldModifySubject = self.hasModifiedMessage and currentSubject == self.lastAutoSubject or currentSubject == "" 
-   local shouldModifyMessage = self.hasModifiedMessage and currentMessage == self.lastAutoMessage or currentSubject == "" 
+   local shouldModifyMessage = self.hasModifiedMessage and currentMessage == self.lastAutoMessage or currentMessage == "" 
 
    if shouldModifySubject then
       self.subjectEntryText:SetText(subject)
