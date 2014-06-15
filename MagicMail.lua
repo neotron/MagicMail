@@ -113,7 +113,7 @@ function MagicMail:OnWindowManagementAdd(tbl)
 
       self:PostHook(composeMail, "OnInfoChanged")
       self:Hook(composeMail, "OnEmailSent")
-      self:PostHook(composeMail, "UpdateControls", "UpdateAttachments")
+      self:Hook(composeMail, "UpdateControls", "UpdateAttachments")
       
       self.composeRecipient = wndMain:FindChild("NameEntryText")
       self.composeRecipient:AddEventHandler("EditBoxTab", "MMOnEditBoxNext")
