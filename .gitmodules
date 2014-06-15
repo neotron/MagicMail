@@ -10,3 +10,6 @@
 [submodule "Libs/GeminiDB"]
 	path = Libs/GeminiDB
 	url = https://github.com/wildstarnasa/GeminiDB.git
+[submodule "Libs/GeminiLogging"]
+	path = Libs/GeminiLogging
+	url = https://github.com/wildstarnasa/GeminiLogging.git

@@ -6,10 +6,13 @@ require "Apollo"
 
 local MagicMail = Apollo.GetPackage("Gemini:Addon-1.1").tPackage:NewAddon("MagicMail", false, { "Mail" }, "Gemini:Hook-1.0" )
 local GeminiGUI = Apollo.GetPackage("Gemini:GUI-1.0").tPackage
+local GeminiLogging = Apollo.GetPackage("Gemini:Logging-1.2").tPackage
 local strupper = string.upper
 local strfind = string.find
 local strlen = string.len
 local sort = table.sort
+local floor = math.floor
+local log
 
 local MAX_RECENT_CHARS = 8
 
@@ -65,11 +68,19 @@ function MagicMail:OnInitialize()
 end
 
 function MagicMail:OnEnable()
+
+   log = GeminiLogging:GetLogger({
+				 level = GeminiLogging.INFO,
+				 pattern = "%d %n %c %l - %m",
+				 appender = "GeminiConsole"
+			 })
+   
    for _,guild in ipairs(GuildLib.GetGuilds()) do
       guild:RequestMembers()
    end
    
    self:AddSelfAsAlt()
+   
 end
 
 function MagicMail:OnDisable()
@@ -97,22 +108,34 @@ end
 
 function MagicMail:OnWindowManagementAdd(tbl)
    if tbl and tbl.strName == Apollo.GetString("Mail_ComposeLabel") then
-      self:PostHook(self.mailAddon.luaComposeMail, "OnInfoChanged")
-      self:Hook(self.mailAddon.luaComposeMail, "OnEmailSent")
-      self.composeRecipient = self.mailAddon.luaComposeMail.wndMain:FindChild("NameEntryText")
+      local composeMail = self.mailAddon.luaComposeMail
+      local wndMain = composeMail.wndMain
+
+      self:PostHook(composeMail, "OnInfoChanged")
+      self:Hook(composeMail, "OnEmailSent")
+      self:PostHook(composeMail, "UpdateControls", "UpdateAttachments")
+      
+      self.composeRecipient = wndMain:FindChild("NameEntryText")
       self.composeRecipient:AddEventHandler("EditBoxTab", "MMOnEditBoxNext")
       self.composeRecipient:AddEventHandler("EditBoxReturn", "MMOnEditBoxNext")
       self.composeRecipient:AddEventHandler("EditBoxEscape", "MMOnEditBoxClear")
       local this = self
-      self.mailAddon.luaComposeMail.MMOnEditBoxNext = function()
+      composeMail.MMOnEditBoxNext = function()
 	 this:OnEditBoxNext()
       end
-      self.mailAddon.luaComposeMail.MMOnEditBoxClear = function()
+      composeMail.MMOnEditBoxClear = function()
 	 this:OnEditBoxClear()
       end
-      local mailcompose = self.mailAddon.luaComposeMail.wndMain:FindChild("MessageEntryComplex")
+      local mailcompose = wndMain:FindChild("MessageEntryComplex")
       self.completionWindow = mailcompose:FindChild("MMCompletionWindow") or GeminiGUI:Create(completionDefinition):GetInstance(self, mailcompose)
       self.completionWindow:Show(false)
+
+      self.subjectEntryText = mailcompose:FindChild("SubjectEntryText")
+      self.messageEntryText = mailcompose:FindChild("MessageEntryText")
+      self.wndCashSendBtn = wndMain:FindChild("CashSendBtn")
+      self.wndCashCODBtn  = wndMain:FindChild("CashCODBtn")
+      self.wndCashWindow = wndMain:FindChild("CashWindow")
+
    end
 end
 
@@ -125,6 +148,85 @@ function MagicMail:OnEditBoxClear()
    self.completionWindow:Show(false)
 end
 
+function MagicMail:UpdateAttachments()
+   local itemList = ""
+   local arAttachments = self.mailAddon.luaComposeMail.arAttachments
+   if #arAttachments == 0 then
+      self.itemSubject = nil
+      self.itemList = nil
+   else
+      for _,id in ipairs(arAttachments) do
+	 local item = MailSystemLib.GetItemFromInventoryId(id)
+	 local details = Item.GetDetailedInfo(item:GetItemId())
+	 local stackCount = item:GetStackCount()
+	 itemList = itemList .. "  "..details.tPrimary.strName
+	 if stackCount > 1 then
+	    itemList = itemList.. " ("..stackCount..")\n"
+	 else
+	    itemList = itemList.."\n";
+	 end
+      end
+      self.itemSubject = #arAttachments == 1 and "1 item" or (#arAttachments.." items")
+      self.itemList = itemList
+   end
+   self:UpdateMailMessageAndSubject()
+end
+
+function MagicMail:UpdateMailMessageAndSubject()
+   local subject = ""
+   local body = ""
+
+   if self.itemList then
+      subject = self.itemSubject
+      body = "Attached Items:\n"..self.itemList
+   end
+
+   local monCoD 
+   local monGift
+   if self.wndCashCODBtn:IsChecked() then
+      monCoD = self.wndCashWindow:GetCurrency()
+   elseif self.wndCashSendBtn:IsChecked() then
+      monGift = self.wndCashWindow:GetCurrency()
+   end
+   if monCoD and strlen(subject) > 0 then 
+      local amount = monCoD:GetMoneyString()
+      if strlen(amount) > 0 then 
+	 subject = subject .." (cost: "..self:ShortFormatGold(monCoD)..")"
+	 body = "Cost: "..amount.."\n\n"..body
+      end
+   elseif monGift then
+      local amount = monGift:GetMoneyString()
+      if strlen(amount) > 0 then
+	 local short = self:ShortFormatGold(monGift)
+	 if strlen(subject) > 0 then
+	    subject = subject ..", "..short
+	 else
+	    subject = "Gift: "..short
+	 end
+	 body = "Gift: "..amount.."\n\n"..body
+      end
+   end
+   self.subjectEntryText:SetText(subject or  "")
+   self.messageEntryText:SetText(body or "")
+end
+
+function MagicMail:ShortFormatGold(amount)
+   local denoms = amount:GetDenomAmounts()
+   local formatted = ""
+   if denoms[1] > 0 then
+      formatted = denoms[1].."p ";
+   end
+   if denoms[2] > 0 then
+      formatted = formatted..denoms[2].."g "
+   end
+   if denoms[3] > 0 then
+      formatted = formatted..denoms[3].."s "
+   end
+   if denoms[4] > 0 then
+      formatted = formatted..denoms[4].."c"
+   end
+   return formatted
+end
 
 function MagicMail:OnInfoChanged(luaCaller, wndHandler, wndControl)
    if wndControl == self.composeRecipient then
@@ -389,8 +491,9 @@ end
 function MagicMail:OnEmailSent(luaHandler, wndHandler, wndControl, bSuccess)
    if bSuccess then
       self:AddRecentRecipient(self.composeRecipient:GetText());
-      self:Unhook(self.mailAddon.luaComposeMail, "OnEmailSent")
-      self:Unhook(self.mailAddon.luaComposeMail, "OnInfoChanged")
+      for hook in pairs(self.hooks[self.mailAddon.luaComposeMail] or {}) do
+	 self:Unhook(self.mailAddon.luaComposeMail, hook)
+      end
    end
 end
 
@@ -424,12 +527,18 @@ function MagicMail:AddSelfAsAlt()
    local charInfo = GameLib.GetAccountRealmCharacter()
    self.character = charInfo.strCharacter
    self.faction = GameLib.GetPlayerUnit():GetFaction()
+
+   if charInfo.strRealm == "Orias" and (self.character == "Ribbots" or self.character == "Aminai") then
+      log:SetLevel(GeminiLogging.DEBUG)
+   end
+   
    local alts = self.db.realm.alts
    for k,v in pairs(alts) do
       if v.name == self.character then
 	 return
       end
    end
+   log:info("Registered new alt: "..self.character)
    alts[#alts+1] = { name = self.character, faction = self.faction }
 end
 
