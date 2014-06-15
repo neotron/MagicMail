@@ -217,7 +217,8 @@ function MagicMail:UpdateMailMessageAndSubject()
    if shouldModifyMessage then
       self.messageEntryText:SetText(body)
    end
-
+   self.lastAutoSubject = subject
+   self.lastAutoMessage = body
    self.hasModifiedMessage =  subject ~= ""
    
 end
