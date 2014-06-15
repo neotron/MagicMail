@@ -1,7 +1,7 @@
 require "Window"
-
 require "MailSystemLib"
 require "GameLib"
+require "GuildLib"
 require "Apollo"
 
 local MagicMail = Apollo.GetPackage("Gemini:Addon-1.1").tPackage:NewAddon("MagicMail", false, { "Mail" }, "Gemini:Hook-1.0" )
@@ -14,6 +14,17 @@ local strlen = string.len
 local sort = table.sort
 local floor = math.floor
 local log
+
+local RecipientColor = {
+   Alt = "ff00afff",
+   Friend = "ff00ff5f",
+   Guild = "ffffff00",
+   Circle = "ffffaf00",
+   Neighbour = "ffdfdfdf",
+   Recent = "ffafcfaf",
+   Default = "ffffffff"
+}
+
 
 local MAX_RECENT_CHARS = 8
 
@@ -104,8 +115,8 @@ function MagicMail:OnEnable()
 			 text = Apollo.GetString("CRB_Yes"),
 			 OnClick = function(settings, data, reason)
 			    FriendshipLib.AddByName(FriendshipLib.CharacterFriendshipType_Ignore,
-						    settings.tData.strSenderName,
-						    settings.tData.strRealm, "Ignored by MagicMail")
+						    data.strSenderName,
+						    data.strRealm, "Ignored by MagicMail")
 			 end,
 		      },
 		      {
@@ -307,13 +318,17 @@ function MagicMail:OnInfoChanged(luaCaller, wndHandler, wndControl)
       local parent = self.completionWindow:FindChild("NameContainer")
       if matches and  #matches > 0 then
 	 -- temporary until list is added
+	 wndControl:SetTextColor(matches[matches[1]])
 	 wndControl:SetText(matches[1])
 	 wndControl:SetSel(partial:len(), -1)
 	 for i=2,#matches do
 	    local btn =  GeminiGUI:Create(nameButtonDefinition):GetInstance(self, parent);
 	    btn:SetText(matches[i])
+	    btn:SetNormalTextColor(matches[matches[i]])
 	    self.matchWindows[#self.matchWindows+1] = btn
 	 end
+      else
+	 wndControl:SetTextColor(RecipientColor.Default)
       end
       local hasMatches  = #self.matchWindows > 0
       if hasMatches then
@@ -495,33 +510,33 @@ function MagicMail:MatchPartialName(partial)
    local matches = {}
    partial = strupper(partial)
    local fetchMore
-   fetchMore = self:FindMoreMatchesInTable(partial, self.db.realm.alts, matches)
-   fetchMore = self:FindMoreMatchesInTable(partial, self.db.realm.recent, matches)
+   fetchMore = self:FindMoreMatchesInTable(partial, self.db.realm.alts, matches, RecipientColor.Alt)
+   fetchMore = self:FindMoreMatchesInTable(partial, self.db.realm.recent, matches, RecipientColor.Recent)
 
    if fetchMore then
-      fetchMore = self:FindMoreMatchesInTable(partial, FriendshipLib.GetList(), matches);
+      fetchMore = self:FindMoreMatchesInTable(partial, FriendshipLib.GetList(), matches, RecipientColor.Friend);
    end
    if self.guildRoster then
       for _,roster in pairs(self.guildRoster) do
 	 if fetchMore then
-	    fetchMore = self:FindMoreMatchesInTable(partial, roster, matches);
+	    fetchMore = self:FindMoreMatchesInTable(partial, roster, matches, roster.color);
 	 end
       end
    end
 
    if fetchMore then
-      fetchMore = self:FindMoreMatchesInTable(partial, HousingLib.GetNeighborList(), matches);
+      fetchMore = self:FindMoreMatchesInTable(partial, HousingLib.GetNeighborList(), matches, RecipientColor.Neighbour);
    end
    sort(matches)
    return matches
 end
 
-function MagicMail:FindMoreMatchesInTable(partial, tbl, matches)
+function MagicMail:FindMoreMatchesInTable(partial, tbl, matches, color)
    local realm, faction, name
    if not tbl then return
 	 true
    end
-   for k,v in pairs(tbl) do
+   for k,v in ipairs(tbl) do
       realm = v.realm or v.strRealmName
       faction = v.faction or v.nFactionId
       name = v.name or v.strCharacterName
@@ -532,7 +547,7 @@ function MagicMail:FindMoreMatchesInTable(partial, tbl, matches)
 	 and not matches[name]
 	 and (v.bIgnore == nil or v.bIgnore == false)
       then
-	    matches[name] = true
+	    matches[name] = color
 	    matches[#matches + 1] = name
       end
       if #matches >= 8 then
@@ -626,6 +641,13 @@ function MagicMail:OnGuildRoster(guildCurr, roster)
    for _,member in ipairs(roster) do
       memberNames[#memberNames + 1] = { name = member.strName }
    end
+
+   if guildCurr:GetType() == GuildLib.GuildType_Guild then
+      memberNames.color = RecipientColor.Guild
+   else
+      memberNames.color = RecipientColor.Circle
+   end
+
    self.guildRoster[guildName] = memberNames
 end
 
