@@ -266,9 +266,9 @@ function MagicMail:UpdateMailMessageAndSubject()
          if strlen(subject) > 0 then
             subject = subject ..", "..short
          else
-            subject = "Gift: "..short
+            subject = "Money: "..short
          end
-         body = "Gift: "..amount.."\n\n"..body
+         body = "Money: "..amount.."\n\n"..body
       end
    end
    local currentSubject = self.subjectEntryText:GetText()
