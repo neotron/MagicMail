@@ -11,6 +11,7 @@ local DLG = Apollo.GetPackage("Gemini:LibDialog-1.0").tPackage
 local strupper = string.upper
 local strfind = string.find
 local strlen = string.len
+local strsub = string.sub
 local sort = table.sort
 local floor = math.floor
 local log
@@ -51,9 +52,9 @@ local completionDefinition = {
    AnchorOffsets  = { 95, 67, 405, 500 },
    Children = {
       {
-	 Name = "NameContainer",
-	 AnchorPoints = "FILL",
-	 AnchorOffsets = { 3, 3, 3, 3 }, 
+         Name = "NameContainer",
+         AnchorPoints = "FILL",
+         AnchorOffsets = { 3, 3, 3, 3 }, 
       },
    },
 }
@@ -97,10 +98,10 @@ end
 function MagicMail:OnEnable()
 
    log = GeminiLogging:GetLogger({
-				 level = GeminiLogging.INFO,
-				 pattern = "%d %n %c %l - %m",
-				 appender = "GeminiConsole"
-			 })
+                                 level = GeminiLogging.INFO,
+                                 pattern = "%d %n %c %l - %m",
+                                 appender = "GeminiConsole"
+                         })
    
    for _,guild in ipairs(GuildLib.GetGuilds()) do
       guild:RequestMembers()
@@ -109,24 +110,24 @@ function MagicMail:OnEnable()
    self:AddSelfAsAlt()
 
    DLG:Register("IgnoreConfirmDialog",
-		{
-		   buttons = {
-		      {
-			 text = Apollo.GetString("CRB_Yes"),
-			 OnClick = function(settings, data, reason)
-			    FriendshipLib.AddByName(FriendshipLib.CharacterFriendshipType_Ignore,
-						    data.strSenderName,
-						    data.strRealm, "Ignored by MagicMail")
-			 end,
-		      },
-		      {
-			 color = "Red",
-			 text = Apollo.GetString("CRB_No"),
-		      },
-		   },
-		   text = "Do you want to ignore this user? All mails from the ignored user will be returned. Ignored users are added to your normal ignore list.",
-		   noCloseButton = true,
-		   showWhileDead = true,
+                {
+                   buttons = {
+                      {
+                         text = Apollo.GetString("CRB_Yes"),
+                         OnClick = function(settings, data, reason)
+                            FriendshipLib.AddByName(FriendshipLib.CharacterFriendshipType_Ignore,
+                                                    data.strSenderName,
+                                                    data.strRealm, "Ignored by MagicMail")
+                         end,
+                      },
+                      {
+                         color = "Red",
+                         text = Apollo.GetString("CRB_No"),
+                      },
+                   },
+                   text = "Do you want to ignore this user? All mails from the ignored user will be returned. Ignored users are added to your normal ignore list.",
+                   noCloseButton = true,
+                   showWhileDead = true,
    })
 end
 
@@ -158,7 +159,7 @@ function MagicMail:OnWindowManagementAdd(tbl)
    if tbl and tbl.strName == Apollo.GetString("Mail_ComposeLabel") then
       local composeMail = self.mailAddon.luaComposeMail
       local wndMain = composeMail.wndMain
-
+      self.previousPartial = nil
       self:PostHook(composeMail, "OnInfoChanged")
       self:Hook(composeMail, "OnEmailSent")
       self:Hook(composeMail, "UpdateControls", "UpdateAttachments")
@@ -169,7 +170,7 @@ function MagicMail:OnWindowManagementAdd(tbl)
       self.composeRecipient:AddEventHandler("EditBoxEscape", "MMOnEditBoxClear")
       local this = self
       composeMail.MMOnEditBoxClear = function()
-	 this:OnEditBoxClear()
+         this:OnEditBoxClear()
       end
       local mailcompose = wndMain:FindChild("MessageEntryComplex")
       self.completionWindow = mailcompose:FindChild("MMCompletionWindow") or GeminiGUI:Create(completionDefinition):GetInstance(self, mailcompose)
@@ -187,12 +188,11 @@ function MagicMail:SetUpIgnoreButton(luaCaller, msgMail)
    local msgInfo = msgMail:GetMessageInfo()
    for _,alt in ipairs(self.db.realm.alts) do
       if alt.name == msgInfo.strSenderName then
-	 -- don't ignore myself!
-	 return
+         -- don't ignore myself!
+         return
       end
    end
-
-   if msgInfo.eSenderType == MailSystemLib.EmailType_Character then
+   if msgInfo.eSenderType == MailSystemLib.EmailType_Character and msgInfo.bIsReturnable then
       local strId = msgMail:GetIdStr()
       local mailWindow = self.mailAddon.tOpenMailMessages[strId]
       if not mailWindow then return end
@@ -221,15 +221,15 @@ function MagicMail:UpdateAttachments()
       self.itemList = nil
    else
       for _,id in ipairs(arAttachments) do
-	 local item = MailSystemLib.GetItemFromInventoryId(id)
-	 local details = Item.GetDetailedInfo(item:GetItemId())
-	 local stackCount = item:GetStackCount()
-	 itemList = itemList .. "  "..details.tPrimary.strName
-	 if stackCount > 1 then
-	    itemList = itemList.. " ("..stackCount..")\n"
-	 else
-	    itemList = itemList.."\n";
-	 end
+         local item = MailSystemLib.GetItemFromInventoryId(id)
+         local details = Item.GetDetailedInfo(item:GetItemId())
+         local stackCount = item:GetStackCount()
+         itemList = itemList .. "  "..details.tPrimary.strName
+         if stackCount > 1 then
+            itemList = itemList.. " ("..stackCount..")\n"
+         else
+            itemList = itemList.."\n";
+         end
       end
       self.itemSubject = #arAttachments == 1 and "1 item" or (#arAttachments.." items")
       self.itemList = itemList
@@ -256,19 +256,19 @@ function MagicMail:UpdateMailMessageAndSubject()
    if monCoD and strlen(subject) > 0 then 
       local amount = monCoD:GetMoneyString()
       if strlen(amount) > 0 then 
-	 subject = subject .." (cost: "..self:ShortFormatGold(monCoD)..")"
-	 body = "Cost: "..amount.."\n\n"..body
+         subject = subject .." (cost: "..self:ShortFormatGold(monCoD)..")"
+         body = "Cost: "..amount.."\n\n"..body
       end
    elseif monGift then
       local amount = monGift:GetMoneyString()
       if strlen(amount) > 0 then
-	 local short = self:ShortFormatGold(monGift)
-	 if strlen(subject) > 0 then
-	    subject = subject ..", "..short
-	 else
-	    subject = "Gift: "..short
-	 end
-	 body = "Gift: "..amount.."\n\n"..body
+         local short = self:ShortFormatGold(monGift)
+         if strlen(subject) > 0 then
+            subject = subject ..", "..short
+         else
+            subject = "Gift: "..short
+         end
+         body = "Gift: "..amount.."\n\n"..body
       end
    end
    local currentSubject = self.subjectEntryText:GetText()
@@ -310,29 +310,36 @@ end
 function MagicMail:OnInfoChanged(luaCaller, wndHandler, wndControl)
    if wndControl == self.composeRecipient then
       local partial = wndControl:GetText()
+      -- this means user hit backspace presumably
+      if self.previousPartial == partial then
+         partial = strsub(partial, 1, -2)
+         wndControl:SetText(partial)
+      end 
+
+      self.previousPartial = partial
       local matches = self:MatchPartialName(partial)
       self.matchWindows = self.matchWindows or {}
       for _,btn in ipairs(self.matchWindows) do
-	 btn:Destroy()
+         btn:Destroy()
       end
       local parent = self.completionWindow:FindChild("NameContainer")
       if matches and  #matches > 0 then
-	 -- temporary until list is added
-	 wndControl:SetTextColor(matches[matches[1]])
-	 wndControl:SetText(matches[1])
-	 wndControl:SetSel(partial:len(), -1)
-	 for i=2,#matches do
-	    local btn =  GeminiGUI:Create(nameButtonDefinition):GetInstance(self, parent);
-	    btn:SetText(matches[i])
-	    btn:SetNormalTextColor(matches[matches[i]])
-	    self.matchWindows[#self.matchWindows+1] = btn
-	 end
+         -- temporary until list is added
+         wndControl:SetTextColor(matches[matches[1]])
+         wndControl:SetText(matches[1])
+         wndControl:SetSel(partial:len(), -1)
+         for i=2,#matches do
+            local btn =  GeminiGUI:Create(nameButtonDefinition):GetInstance(self, parent);
+            btn:SetText(matches[i])
+            btn:SetNormalTextColor(matches[matches[i]])
+            self.matchWindows[#self.matchWindows+1] = btn
+         end
       else
-	 wndControl:SetTextColor(RecipientColor.Default)
+         wndControl:SetTextColor(RecipientColor.Default)
       end
       local hasMatches  = #self.matchWindows > 0
       if hasMatches then
-	 parent:ArrangeChildrenVert()
+         parent:ArrangeChildrenVert()
       end
       self.completionWindow:Show(hasMatches);
       self.composeRecipient:SetStyleEx("WantTab", hasMatches)
@@ -390,41 +397,41 @@ function MagicMail:ProcessNextBatch()
       hasAttachments = #msgInfo.arAttachments > 0
       local processed = false
       if sender == "Phineas T. Rotostar" or subject == "Here's your stuff!" then
-	 -- Auction house
-	 local shouldDelete = true
-	 if hasAttachments then
-	    if self.getCashOnly then
-	       shouldDelete = false
-	    else
-	       mail:TakeAllAttachments()
-	       processed = true
-	    end
-	 end
-	 if hasMoney then
-	    mail:TakeMoney()
-	    processed = true
-	 end
-	 if shouldDelete then
-	    local count = #mailsToDelete + 1
-	    mailsToDelete[#mailsToDelete+1] = mail
-	    if count >= 10 then
-	       MailSystemLib.DeleteMultipleMessages(mailsToDelete)
-	       mailsToDelete = {}
-	    end
-	 end
+         -- Auction house
+         local shouldDelete = true
+         if hasAttachments then
+            if self.getCashOnly then
+               shouldDelete = false
+            else
+               mail:TakeAllAttachments()
+               processed = true
+            end
+         end
+         if hasMoney then
+            mail:TakeMoney()
+            processed = true
+         end
+         if shouldDelete then
+            local count = #mailsToDelete + 1
+            mailsToDelete[#mailsToDelete+1] = mail
+            if count >= 10 then
+               MailSystemLib.DeleteMultipleMessages(mailsToDelete)
+               mailsToDelete = {}
+            end
+         end
       else
-	 if hasAttachments and not self.getCashOnly then
-	    processed = true
-	    mail:TakeAllAttachments()
-	 end
-	 if hasMoney then
-	    processed = true
-	    mail:TakeMoney();
-	 end
+         if hasAttachments and not self.getCashOnly then
+            processed = true
+            mail:TakeAllAttachments()
+         end
+         if hasMoney then
+            processed = true
+            mail:TakeMoney();
+         end
       end
       if processed then
-	 -- Delay execution
-	 break
+         -- Delay execution
+         break
       end
    end
    self.mailsToDelete = mailsToDelete
@@ -432,7 +439,7 @@ function MagicMail:ProcessNextBatch()
       self.currentMailIndex = lastProcessedIndex + 1
       if self.button then self.button:SetText("Cancel ("..(#mails-self.currentMailIndex)..")") end
       if not self.timer then
-	 self.timer = ApolloTimer.Create(0.2, true, "ProcessNextBatch", self)
+         self.timer = ApolloTimer.Create(0.2, true, "ProcessNextBatch", self)
       end
    else
       self:FinishMailboxProcess()
@@ -451,7 +458,7 @@ function MagicMail:FinishMailboxProcess(busy)
    if busy then
       self.busyTimeout = (self.busyTimeout or 2) + 1
       if self.busyTimeout > 6 then
-	 self.busyTimeout = 6
+         self.busyTimeout = 6
       end
       self.busyTimerRemaining = self.busyTimeout-1
       self.button:SetText("Busy ("..self.busyTimeout..")")
@@ -518,9 +525,9 @@ function MagicMail:MatchPartialName(partial)
    end
    if self.guildRoster then
       for _,roster in pairs(self.guildRoster) do
-	 if fetchMore then
-	    fetchMore = self:FindMoreMatchesInTable(partial, roster, matches, roster.color);
-	 end
+         if fetchMore then
+            fetchMore = self:FindMoreMatchesInTable(partial, roster, matches, roster.color);
+         end
       end
    end
 
@@ -534,24 +541,24 @@ end
 function MagicMail:FindMoreMatchesInTable(partial, tbl, matches, color)
    local realm, faction, name
    if not tbl then return
-	 true
+         true
    end
    for k,v in ipairs(tbl) do
       realm = v.realm or v.strRealmName
       faction = v.faction or v.nFactionId
       name = v.name or v.strCharacterName
       if (name ~= self.character)
-	 and (not realm or realm == self.realm)
-	 and (not faction or faction == self.faction)
+         and (not realm or realm == self.realm)
+         and (not faction or faction == self.faction)
          and (strfind(strupper(name), partial) == 1)
-	 and not matches[name]
-	 and (v.bIgnore == nil or v.bIgnore == false)
+         and not matches[name]
+         and (v.bIgnore == nil or v.bIgnore == false)
       then
-	    matches[name] = color
-	    matches[#matches + 1] = name
+            matches[name] = color
+            matches[#matches + 1] = name
       end
       if #matches >= 8 then
-	 return false
+         return false
       end
    end
    return true
@@ -565,7 +572,7 @@ end
 function MagicMail:OnGuildMemberChange( guildCurr )
    if guildCurr and guildCurr:GetType() == GuildLib.GuildType_Guild then
       if self.guildRoster then
-	 self.guildRoster[self:GuildId(guildCurr)] = nil
+         self.guildRoster[self:GuildId(guildCurr)] = nil
       end
       guildCurr:RequestMembers()
    end
@@ -575,7 +582,7 @@ function MagicMail:OnEmailSent(luaHandler, wndHandler, wndControl, bSuccess)
    if bSuccess then
       self:AddRecentRecipient(self.composeRecipient:GetText());
       for hook in pairs(self.hooks[self.mailAddon.luaComposeMail] or {}) do
-	 self:Unhook(self.mailAddon.luaComposeMail, hook)
+         self:Unhook(self.mailAddon.luaComposeMail, hook)
       end
       self.lastAutoSubject = nil
       self.lastAutoMessage = nil
@@ -589,11 +596,11 @@ function MagicMail:AddRecentRecipient(name)
    local oldestKey 
    for k,v in pairs(recents) do
       if v.name == self.character then
-	 return
+         return
       end
       if oldestTimestamp == nil or v.t < oldestTimestamp then
-	 oldestTimestamp = v.t
-	 oldestKey = k
+         oldestTimestamp = v.t
+         oldestKey = k
       end
    end
    local newChar = {
@@ -621,7 +628,7 @@ function MagicMail:AddSelfAsAlt()
    local alts = self.db.realm.alts
    for k,v in pairs(alts) do
       if v.name == self.character then
-	 return
+         return
       end
    end
    log:info("Registered new alt: "..self.character)
@@ -654,8 +661,8 @@ end
 function MagicMail:GetConfigDefaults() 
    return {
       realm = {
-	 alts = {},
-	 recents = {}
+         alts = {},
+         recents = {}
       }
    }
 end
