@@ -90,7 +90,6 @@ function MagicMail:OnInitialize()
 
    Apollo.RegisterSlashCommand("magmail", "OnSlashCommand", self)
    Apollo.RegisterEventHandler("WindowManagementAdd",   "OnWindowManagementAdd", self)
-   Apollo.RegisterEventHandler("WindowManagementReady", "OnWindowManagementReady", self)
    Apollo.RegisterEventHandler("GuildRoster",           "OnGuildRoster", self)
    Apollo.RegisterEventHandler("GuildMemberChange",     "OnGuildMemberChange", self)
 end
@@ -148,39 +147,47 @@ function MagicMail:OnMailResult(luaCaller, result)
    end
 end
 
-function MagicMail:OnWindowManagementReady()
+function MagicMail:MainMailWindowSetup()
    self.mailAddon = Apollo.GetAddon("Mail")
    local mailform = self.mailAddon.wndMain:FindChild("MailForm")
    self.button = mailform:FindChild("MMTakeAllBtn") or GeminiGUI:Create(buttonDefinition):GetInstance(self, mailform)
    self:PostHook(self.mailAddon, "OpenReceivedMessage", "SetUpIgnoreButton")
 end
 
-function MagicMail:OnWindowManagementAdd(tbl)
-   if tbl and tbl.strName == Apollo.GetString("Mail_ComposeLabel") then
-      local composeMail = self.mailAddon.luaComposeMail
-      local wndMain = composeMail.wndMain
-      self.previousPartial = nil
-      self:PostHook(composeMail, "OnInfoChanged")
-      self:Hook(composeMail, "OnEmailSent")
-      self:Hook(composeMail, "UpdateControls", "UpdateAttachments")
-      
-      self.composeRecipient = wndMain:FindChild("NameEntryText")
-      self.composeRecipient:AddEventHandler("EditBoxTab", "MMOnEditBoxClear")
-      self.composeRecipient:AddEventHandler("EditBoxReturn", "MMOnEditBoxClear")
-      self.composeRecipient:AddEventHandler("EditBoxEscape", "MMOnEditBoxClear")
-      local this = self
-      composeMail.MMOnEditBoxClear = function()
-         this:OnEditBoxClear()
-      end
-      local mailcompose = wndMain:FindChild("MessageEntryComplex")
-      self.completionWindow = mailcompose:FindChild("MMCompletionWindow") or GeminiGUI:Create(completionDefinition):GetInstance(self, mailcompose)
-      self.completionWindow:Show(false)
+function MagicMail:ComposeWindowSetup()
+   local composeMail = self.mailAddon.luaComposeMail
+   local wndMain = composeMail.wndMain
+   self.previousPartial = nil
+   self:PostHook(composeMail, "OnInfoChanged")
+   self:Hook(composeMail, "OnEmailSent")
+   self:Hook(composeMail, "UpdateControls", "UpdateAttachments")
+   
+   self.composeRecipient = wndMain:FindChild("NameEntryText")
+   self.composeRecipient:AddEventHandler("EditBoxTab", "MMOnEditBoxClear")
+   self.composeRecipient:AddEventHandler("EditBoxReturn", "MMOnEditBoxClear")
+   self.composeRecipient:AddEventHandler("EditBoxEscape", "MMOnEditBoxClear")
+   local this = self
+   composeMail.MMOnEditBoxClear = function()
+      this:OnEditBoxClear()
+   end
+   local mailcompose = wndMain:FindChild("MessageEntryComplex")
+   self.completionWindow = mailcompose:FindChild("MMCompletionWindow") or GeminiGUI:Create(completionDefinition):GetInstance(self, mailcompose)
+   self.completionWindow:Show(false)
+   
+   self.subjectEntryText = mailcompose:FindChild("SubjectEntryText")
+   self.messageEntryText = mailcompose:FindChild("MessageEntryText")
+   self.wndCashSendBtn = wndMain:FindChild("CashSendBtn")
+   self.wndCashCODBtn  = wndMain:FindChild("CashCODBtn")
+   self.wndCashWindow = wndMain:FindChild("CashWindow")
+end
 
-      self.subjectEntryText = mailcompose:FindChild("SubjectEntryText")
-      self.messageEntryText = mailcompose:FindChild("MessageEntryText")
-      self.wndCashSendBtn = wndMain:FindChild("CashSendBtn")
-      self.wndCashCODBtn  = wndMain:FindChild("CashCODBtn")
-      self.wndCashWindow = wndMain:FindChild("CashWindow")
+function MagicMail:OnWindowManagementAdd(tbl)
+   if not tbl then return end
+
+   if tbl.strName == Apollo.GetString("Mail_ComposeLabel") then
+      self:ComposeWindowSetup()
+   elseif tbl.strName == Apollo.GetString("InterfaceMenu_Mail") then
+      self:MainMailWindowSetup()
    end
 end
 
