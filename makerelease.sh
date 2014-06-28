@@ -6,13 +6,13 @@ if [ -z "$1" ]; then
 fi
 VERSION=$1
 
-DEST=MagicMail-$VERSION
+DEST=`basename $PWD`
 
-rm -rf ~/${DEST}/ ~/${DEST}.zip
+rm -rf ~/${DEST}/ ~/${DEST}-$VERSION.zip
 cp -a . ~/${DEST}/
 cd ~/
 rm -rf ${DEST}/Libs/GeminiGUI/examples
-find ${DEST} -name '.git*' -o -name "*~" -o -name "makerelease.sh" |xargs rm -rf
+find ${DEST} -name '.git*' -o -name "*~" -o -name "makerelease.sh" -o -name '#*#' |xargs rm -rf
 
-zip -r ${DEST}.zip $DEST
+zip -r ${DEST}-$VERSION.zip $DEST
 rm -rf $DEST
