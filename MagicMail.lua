@@ -280,15 +280,11 @@ function MagicMail:MainMailWindowSetup()
          end
          tBtnDef.AnchorOffsets = { 4, 4 + yoffset, -4, 64 + yoffset }
          yoffset = yoffset + 38
-         SendVarToRover("Child "..i, tBtnDef)
          children[i] = tBtnDef
       end
       tMailWindowPopoutDef.Children[2].Children = children
-      SendVarToRover("Defin", tMailWindowPopoutDef);
       self.mainMenu = GeminiGUI:Create(tMailWindowPopoutDef):GetInstance(self, wndMain)
    end
---   self.mainMenu:FindChild("Container"):ArrangeChildrenVert()
-   SendVarToRover("popout menu", self.mainMenu)
    self:PostHook(self.mailAddon, "OpenReceivedMessage", "SetUpIgnoreButton")
 end
 
@@ -539,57 +535,59 @@ function MagicMail:ProcessNextBatch()
       lastProcessedIndex = i
       mail = self.pendingMails[i]
       msgInfo = mail:GetMessageInfo()
-      sender = msgInfo.strSenderName
-      subject = msgInfo.strSubject
-      hasMoney = not msgInfo.monGift:IsZero()
-      hasAttachments = #msgInfo.arAttachments > 0
-      local processed = false
-      if sender == "Phineas T. Rotostar" or subject == "Here's your stuff!" then
-         -- Auction house
-         local shouldDelete = true
-         if hasAttachments then
-            -- we have attachments, let's figure out if we should take stuff
-            local shouldTake = (mode == RunMode.Everything or mode == RunMode.Auto) and mode ~= RunMode.Gold
-            if not shouldTake then
-               if mode == RunMode.Bought then
-                  shouldTake = subject == "Item Auction Won" or subject == "Commodity Buy Order Filled"
-               elseif mode == RunMode.Unsold then
-                  shouldTake = subject == "Item Auction Expired" or subject == "Commodity Sell Order Expired"
+      if msgInfo then 
+         sender = msgInfo.strSenderName
+         subject = msgInfo.strSubject
+         hasMoney = not msgInfo.monGift:IsZero()
+         hasAttachments = #msgInfo.arAttachments > 0
+         local processed = false
+         if sender == "Phineas T. Rotostar" or subject == "Here's your stuff!" then
+            -- Auction house
+            local shouldDelete = true
+            if hasAttachments then
+               -- we have attachments, let's figure out if we should take stuff
+               local shouldTake = (mode == RunMode.Everything or mode == RunMode.Auto) and mode ~= RunMode.Gold
+               if not shouldTake then
+                  if mode == RunMode.Bought then
+                     shouldTake = subject == "Item Auction Won" or subject == "Commodity Buy Order Filled"
+                  elseif mode == RunMode.Unsold then
+                     shouldTake = subject == "Item Auction Expired" or subject == "Commodity Sell Order Expired"
+                  end
+               end
+               if shouldTake then
+                  mail:TakeAllAttachments()
+                  processed = true
                end
             end
-            if shouldTake then
-               mail:TakeAllAttachments()
+            if hasMoney then
+               -- always take money
+               mail:TakeMoney()
                processed = true
             end
-         end
-         if hasMoney then
-            -- always take money
-            mail:TakeMoney()
-            processed = true
-         end
-         if shouldDelete then
-            local count = #mailsToDelete + 1
-            mailsToDelete[#mailsToDelete+1] = mail
-            if count >= 10 then
-               MailSystemLib.DeleteMultipleMessages(mailsToDelete)
-               mailsToDelete = {}
+            if shouldDelete then
+               local count = #mailsToDelete + 1
+               mailsToDelete[#mailsToDelete+1] = mail
+               if count >= 10 then
+                  MailSystemLib.DeleteMultipleMessages(mailsToDelete)
+                  mailsToDelete = {}
+               end
+            end
+         else
+            if hasAttachments and self.mode == RunMode.Everything then
+               -- only take misc items if asked
+               processed = true
+               mail:TakeAllAttachments()
+            end
+            if hasMoney then
+               -- always take money
+               processed = true
+               mail:TakeMoney();
             end
          end
-      else
-         if hasAttachments and self.mode == RunMode.Everything then
-            -- only take misc items if asked
-            processed = true
-            mail:TakeAllAttachments()
+         if processed then
+            -- Delay execution
+            break
          end
-         if hasMoney then
-            -- always take money
-            processed = true
-            mail:TakeMoney();
-         end
-      end
-      if processed then
-         -- Delay execution
-         break
       end
    end
    self.mailsToDelete = mailsToDelete
@@ -610,7 +608,6 @@ function MagicMail:FinishMailboxProcess(busy)
    if not busy and self.mailsToDelete and #self.mailsToDelete > 0 then
       MailSystemLib.DeleteMultipleMessages(self.mailsToDelete)
    end
-   Print("Finishing processing.")
    self.currentMailIndex = nil
    self.pendingMails = nil
    self.mailsToDelete = nil
