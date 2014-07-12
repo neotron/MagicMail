@@ -16,6 +16,7 @@ local sort = table.sort
 local floor = math.floor
 local log
 
+
 local RecipientColor = {
    Alt = "ff00afff",
    Friend = "ff00ff5f",
@@ -27,20 +28,132 @@ local RecipientColor = {
 }
 
 
+local RunMode = {
+   None = 0,
+   Gold = 1,
+   Everything = 2,
+   Auto = 3,
+   Bought = 4,
+   Unsold = 5,
+}
+
 local MAX_RECENT_CHARS = 8
 
+local buttons = {
+   {
+      Text = "Take All Gold", 
+      Name = "TakeAllGoldBtn", 
+      Events = {
+         ButtonCheck = "OnTakeAllGoldBtnCheck",
+         ButtonUncheck = "OnUncheck"
+      },
+   },
+   {
+      Name = "TakeAllBtn", 
+      Text = "Take Everything", 
+      Events = {
+         ButtonCheck = "OnTakeAllBtnCheck",
+         ButtonUncheck = "OnUncheck",
+      },
+            },
+   {
+      Name = "TakeBoughtBtn", 
+      Text = "Take Bought Items", 
+      Events = {
+         ButtonCheck = "OnTakeBoughtBtnCheck",
+         ButtonUncheck = "OnUncheck",
+      },
+   },
+   {
+      Name = "TakeUnsoldBtn", 
+      Text = "Take Unsold Items", 
+      Events = {
+         ButtonCheck = "OnTakeUnsoldBtnCheck",
+         ButtonUncheck = "OnUncheck",
+      },
+   },
+   {
+      Name = "TakeAutoBtn", 
+      Text = "Take All Auto Mails", 
+      Events = {
+         ButtonCheck = "OnTakeAutoBtnCheck",
+         ButtonUncheck = "OnUncheck",
+      },
+   },
+}
+
+local tMailButtonDef = {
+   AnchorPoints = "HFILL",
+   Class = "Button", 
+   Base = "BK3:btnHolo_Blue_Med", 
+   Font = "CRB_Button", 
+   ButtonType = "Check", 
+   RadioGroup = "MagicMailBtnGroup", 
+   DT_VCENTER = true, 
+   DT_CENTER = true, 
+   BGColor = "white", 
+   TextColor = "white", 
+   TooltipColor = "white", 
+   NormalTextColor = "UI_BtnTextBlueNormal", 
+   PressedTextColor = "UI_BtnTextBluePressed", 
+   FlybyTextColor = "UI_BtnTextBlueFlyby", 
+   PressedFlybyTextColor = "UI_BtnTextBluePressedFlyby", 
+   DisabledTextColor = "UI_BtnTextBlueDisabled", 
+   TestAlpha = true, 
+   ButtonTextXMargin = 18, 
+   DT_WORDBREAK = true, 
+   GlobalRadioGroup = "", 
+   Events = {
+   },
+}
+
+
+
+local tMailWindowPopoutDef = {
+   AnchorOffsets = { -20, 28, 220, 281 },
+   AnchorPoints = { 1, 0, 1, 0 },
+   RelativeToClient = true, 
+   Name = "MailWindowPopout", 
+   BGColor = "white", 
+   TextColor = "white", 
+   Picture = true, 
+   IgnoreMouse = true, 
+   NoClip = true, 
+   Sprite = "CRB_Basekit:kitBase_HoloBlue_PopoutLarge", 
+   Children = {
+      {
+         AnchorOffsets = { 0, 20, 0, 40 },
+         AnchorPoints = "HFILL",
+         RelativeToClient = true, 
+         Font = "CRB_InterfaceMedium_B", 
+         Text = "Magic Mail", 
+         Name = "Title", 
+         BGColor = "white", 
+         TextColor = "UI_WindowTitleYellow", 
+         DT_CENTER = true, 
+         DT_VCENTER = true, 
+      },
+      {
+         AnchorOffsets = { 23, 25, -11, -10 },
+         AnchorPoints = { 0, 0, 1, 1 },
+         RelativeToClient = true, 
+         BGColor = "UI_WindowBGDefault", 
+         TextColor = "UI_WindowTextDefault", 
+         Name = "Container", 
+         Children = {
+         },
+      },
+   },
+}
+
 local buttonDefinition = { 
-   WidgetType    = "PushButton",
-   Text          = "Take All",
+   WidgetType    = "Window",
    Name = "MMTakeAllBtn",
-   Base = "CRB_Basekit:kitBtn_Metal_LargeGreen",
    AnchorPoints = { 0, 1, 0, 1 },
    AnchorOffsets = {212,-78,324,-31},
-   NormalTextColor = "UI_BtnTextGreenNormal",
-   PressedTextColor = "UI_BtnTextGreenPressed",
-   Events = {
-      ButtonSignal = "OnSlashCommand"
-   },
+   TextColor = "UI_BtnTextGreenNormal",
+   DT_CENTER = true, 
+   DT_VCENTER = true, 
 }
    
 local completionDefinition = {
@@ -139,7 +252,7 @@ function MagicMail:OnMailResult(luaCaller, result)
    result == GameLib.CodeEnumGenericError.Item_InventoryFull then
       -- Can still get cash
       Print("Too far away, fetching cash only.")
-      self.getCashOnly = true;
+      self.mode = RunMode.Gold
    elseif result == GameLib.CodeEnumGenericError.Mail_Busy then
       self:FinishMailboxProcess(true)
    else
@@ -149,8 +262,33 @@ end
 
 function MagicMail:MainMailWindowSetup()
    self.mailAddon = Apollo.GetAddon("Mail")
-   local mailform = self.mailAddon.wndMain:FindChild("MailForm")
+   local wndMain = self.mailAddon.wndMain
+   local mailform = wndMain:FindChild("MailForm")
    self.button = mailform:FindChild("MMTakeAllBtn") or GeminiGUI:Create(buttonDefinition):GetInstance(self, mailform)
+   self.mainMenu = wndMain:FindChild("MailWindowPopout")
+
+   local yoffset = 0
+   if not self.mainMenu then
+      local children = {}
+      for i,btn in ipairs(buttons) do
+         local tBtnDef = {}
+         for k,v in pairs(tMailButtonDef) do
+            tBtnDef[k] = v
+         end
+         for k,v in pairs(btn) do
+            tBtnDef[k] = v
+         end
+         tBtnDef.AnchorOffsets = { 4, 4 + yoffset, -4, 64 + yoffset }
+         yoffset = yoffset + 38
+         SendVarToRover("Child "..i, tBtnDef)
+         children[i] = tBtnDef
+      end
+      tMailWindowPopoutDef.Children[2].Children = children
+      SendVarToRover("Defin", tMailWindowPopoutDef);
+      self.mainMenu = GeminiGUI:Create(tMailWindowPopoutDef):GetInstance(self, wndMain)
+   end
+--   self.mainMenu:FindChild("Container"):ArrangeChildrenVert()
+   SendVarToRover("popout menu", self.mainMenu)
    self:PostHook(self.mailAddon, "OpenReceivedMessage", "SetUpIgnoreButton")
 end
 
@@ -357,6 +495,7 @@ function MagicMail:OnSlashCommand()
    if self.pendingMails or self.busyTimer then
       self:FinishMailboxProcess()
    else
+      self.mode = RunMode.Everything
       self:ProcessMailbox()
    end
 end
@@ -365,13 +504,13 @@ function MagicMail:ProcessMailbox()
    self:StopTimers()
    local pendingMails = MailSystemLib.GetInbox()
    if not #pendingMails then
+      MagicMail:FinishMailboxProcess()
       return
    end
    if self.button then self.button:SetText("Cancel ("..#pendingMails..")") end
    self.pendingMails = pendingMails
    self.mailsToDelete = {}
    self.currentMailIndex = 1
-   self.getCashOnly = false
    self:Unhook(self.mailAddon, "OnMailResult")
    self:RawHook(self.mailAddon, "OnMailResult")
    self:ProcessNextBatch()
@@ -379,6 +518,7 @@ end
 
 function MagicMail:ProcessNextBatch()
    if not self.pendingMails then
+      MagicMail:FinishMailboxProcess()
       return
    end
    local mailsToDelete = self.mailsToDelete or {}
@@ -393,6 +533,7 @@ function MagicMail:ProcessNextBatch()
    if endIdx > startIdx + 20 then
       endIdx = startIdx + 20
    end
+   local mode = self.mode
 
    for i=startIdx,endIdx do
       lastProcessedIndex = i
@@ -407,14 +548,22 @@ function MagicMail:ProcessNextBatch()
          -- Auction house
          local shouldDelete = true
          if hasAttachments then
-            if self.getCashOnly then
-               shouldDelete = false
-            else
+            -- we have attachments, let's figure out if we should take stuff
+            local shouldTake = (mode == RunMode.Everything or mode == RunMode.Auto) and mode ~= RunMode.Gold
+            if not shouldTake then
+               if mode == RunMode.Bought then
+                  shouldTake = subject == "Item Auction Won" or subject == "Commodity Buy Order Filled"
+               elseif mode == RunMode.Unsold then
+                  shouldTake = subject == "Item Auction Expired" or subject == "Commodity Sell Order Expired"
+               end
+            end
+            if shouldTake then
                mail:TakeAllAttachments()
                processed = true
             end
          end
          if hasMoney then
+            -- always take money
             mail:TakeMoney()
             processed = true
          end
@@ -427,11 +576,13 @@ function MagicMail:ProcessNextBatch()
             end
          end
       else
-         if hasAttachments and not self.getCashOnly then
+         if hasAttachments and self.mode == RunMode.Everything then
+            -- only take misc items if asked
             processed = true
             mail:TakeAllAttachments()
          end
          if hasMoney then
+            -- always take money
             processed = true
             mail:TakeMoney();
          end
@@ -459,6 +610,7 @@ function MagicMail:FinishMailboxProcess(busy)
    if not busy and self.mailsToDelete and #self.mailsToDelete > 0 then
       MailSystemLib.DeleteMultipleMessages(self.mailsToDelete)
    end
+   Print("Finishing processing.")
    self.currentMailIndex = nil
    self.pendingMails = nil
    self.mailsToDelete = nil
@@ -471,7 +623,7 @@ function MagicMail:FinishMailboxProcess(busy)
       self.button:SetText("Busy ("..self.busyTimeout..")")
       self.busyTimer = ApolloTimer.Create(1, true, "CountDownBusyTimer", self);
    else
-      self.button:SetText("Take All")
+      self.button:SetText("")
       -- restore mail addon handler, after a short delay
       self.resultTimer = ApolloTimer.Create(0.5, false, "RestoreResultHandler", self)
       self.busyTimeout = nil
@@ -492,6 +644,10 @@ end
 function MagicMail:RestoreResultHandler()
    self:Unhook(self.mailAddon, "OnMailResult")
    self.resultTimer = nil
+   if self.checkedButton then
+      self.hasUnchecked = true
+      self.checkedButton:SetCheck(false)
+   end
 end
 
 function MagicMail:StopTimers()
@@ -672,4 +828,52 @@ function MagicMail:GetConfigDefaults()
          recents = {}
       }
    }
+end
+
+---------------------------------------------------------------------------------------------------
+-- MailWindowPopout Functions
+---------------------------------------------------------------------------------------------------
+
+function MagicMail:OnTakeAllGoldBtnCheck( wndHandler, wndControl, eMouseButton )
+   if wndHandler ~= wndControl then return end
+   self.mode = RunMode.Gold
+   self.checkedButton = wndControl
+   self:ProcessMailbox()
+end
+
+function MagicMail:OnTakeAllBtnCheck( wndHandler, wndControl, eMouseButton )
+   if wndHandler ~= wndControl then return end
+   self.mode = RunMode.Everything
+   self.checkedButton = wndControl
+   self:ProcessMailbox()
+end
+
+function MagicMail:OnTakeBoughtBtnCheck( wndHandler, wndControl, eMouseButton )
+   if wndHandler ~= wndControl then return end
+   self.mode = RunMode.Bought
+   self.checkedButton = wndControl
+   self:ProcessMailbox()
+end
+
+function MagicMail:OnTakeUnsoldBtnCheck( wndHandler, wndControl, eMouseButton )
+   if wndHandler ~= wndControl then return end
+   self.mode = RunMode.Unsold
+   self.checkedButton = wndControl
+   self:ProcessMailbox()
+end
+
+function MagicMail:OnTakeAutoBtnCheck( wndHandler, wndControl, eMouseButton )
+   if wndHandler ~= wndControl then return end
+   self.mode = RunMode.Auto
+   self.checkedButton = wndControl
+   self:ProcessMailbox()
+end
+
+function MagicMail:OnUncheck( wndHandler, wndControl, eMouseButton )
+   if wndHandler ~= wndControl then return end
+   if not self.hasUnchecked then
+      self:FinishMailboxProcess()
+   end
+   self.hasUnchecked = nil
+   self.checkedButton = nil
 end
