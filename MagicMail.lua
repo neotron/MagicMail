@@ -49,14 +49,6 @@ local buttons = {
       },
    },
    {
-      Name = "TakeAllBtn", 
-      Text = "Take Everything", 
-      Events = {
-         ButtonCheck = "OnTakeAllBtnCheck",
-         ButtonUncheck = "OnUncheck",
-      },
-            },
-   {
       Name = "TakeBoughtBtn", 
       Text = "Take Bought Items", 
       Events = {
@@ -107,10 +99,16 @@ local tMailButtonDef = {
    },
 }
 
-
+local tMoreButtonDef = {
+   AnchorPoints = { 1, 0, 1, 0 },
+   AnchorOffsets = { -48, 47, -9, 83},
+   Class = "Button", 
+   Base = "CRB_Basekit:kitBtn_Metal_Options", 
+   ButtonType = "Check", 
+}
 
 local tMailWindowPopoutDef = {
-   AnchorOffsets = { -20, 28, 220, 281 },
+   AnchorOffsets = { -20, 48, 220, 265 },
    AnchorPoints = { 1, 0, 1, 0 },
    RelativeToClient = true, 
    Name = "MailWindowPopout", 
@@ -119,7 +117,8 @@ local tMailWindowPopoutDef = {
    Picture = true, 
    IgnoreMouse = true, 
    NoClip = true, 
-   Sprite = "CRB_Basekit:kitBase_HoloBlue_PopoutLarge", 
+   Sprite = "CRB_Basekit:kitBase_HoloBlue_PopoutLarge",
+   Visible = false, 
    Children = {
       {
          AnchorOffsets = { 0, 20, 0, 40 },
@@ -147,15 +146,19 @@ local tMailWindowPopoutDef = {
 }
 
 local buttonDefinition = { 
-   WidgetType    = "Window",
+   WidgetType    = "PushButton",
+   Text          = "Take All",
    Name = "MMTakeAllBtn",
+   Base = "CRB_Basekit:kitBtn_Metal_LargeGreen",
    AnchorPoints = { 0, 1, 0, 1 },
    AnchorOffsets = {212,-78,324,-31},
-   TextColor = "UI_BtnTextGreenNormal",
-   DT_CENTER = true, 
-   DT_VCENTER = true, 
+   NormalTextColor = "UI_BtnTextGreenNormal",
+   PressedTextColor = "UI_BtnTextGreenPressed",
+   Events = {
+      ButtonSignal = "OnSlashCommand"
+   },
 }
-   
+
 local completionDefinition = {
    Name          = "MMCompletionWindow",
    Picture       = true,
@@ -266,7 +269,7 @@ function MagicMail:MainMailWindowSetup()
    local mailform = wndMain:FindChild("MailForm")
    self.button = mailform:FindChild("MMTakeAllBtn") or GeminiGUI:Create(buttonDefinition):GetInstance(self, mailform)
    self.mainMenu = wndMain:FindChild("MailWindowPopout")
-
+   self.closeBtn = wndMain:FindChild("MMCloseBtn") or GeminiGUI:Create(tMoreButtonDef):GetInstance(self, wndMain)
    local yoffset = 0
    if not self.mainMenu then
       local children = {}
@@ -285,6 +288,7 @@ function MagicMail:MainMailWindowSetup()
       tMailWindowPopoutDef.Children[2].Children = children
       self.mainMenu = GeminiGUI:Create(tMailWindowPopoutDef):GetInstance(self, wndMain)
    end
+   self.closeBtn:AttachWindow(self.mainMenu)
    self:PostHook(self.mailAddon, "OpenReceivedMessage", "SetUpIgnoreButton")
 end
 
@@ -620,7 +624,7 @@ function MagicMail:FinishMailboxProcess(busy)
       self.button:SetText("Busy ("..self.busyTimeout..")")
       self.busyTimer = ApolloTimer.Create(1, true, "CountDownBusyTimer", self);
    else
-      self.button:SetText("")
+      self.button:SetText("Take All")
       -- restore mail addon handler, after a short delay
       self.resultTimer = ApolloTimer.Create(0.5, false, "RestoreResultHandler", self)
       self.busyTimeout = nil
